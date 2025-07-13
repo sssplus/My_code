@@ -1,0 +1,82 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Sigmoid function (as defined in your notes)
+def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
+
+# --- Tower Function Definition ---
+def tower_function(x, k, a, b):
+    """
+    Creates a 'tower' or rectangular pulse shape by subtracting two sigmoids.
+
+    Args:
+        x (np.array): Input x-values.
+        k (float): Steepness factor for the sigmoid transitions. Higher k means sharper edges.
+        a (float): The x-coordinate where the tower starts to rise.
+        b (float): The x-coordinate where the tower starts to fall.
+
+    Returns:
+        np.array: The y-values representing the tower shape.
+    """
+    # The first sigmoid creates the rising edge
+    rising_edge = sigmoid(k * (x - a))
+
+    # The second sigmoid creates the falling edge (when subtracted)
+    falling_edge = sigmoid(k * (x - b))
+
+    # Subtracting the second from the first creates the plateau
+    return rising_edge - falling_edge
+
+# --- Parameters for the Tower ---
+# You can experiment with these values!
+k_steepness = 10  # Controls how sharp the edges of the tower are (higher = sharper)
+a_start = 0.0     # X-coordinate where the tower begins to rise
+b_end = 2.0       # X-coordinate where the tower begins to fall
+
+# Create a range of x values to plot
+x_values = np.linspace(-3, 5, 500) # From -3 to 5, with 500 points
+
+# Calculate the y values for the tower function
+y_tower = tower_function(x_values, k_steepness, a_start, b_end)
+
+# --- Plotting ---
+plt.figure(figsize=(10, 6))
+
+# Plot the main tower function
+plt.plot(x_values, y_tower, label=f'Tower Function (k={k_steepness}, a={a_start}, b={b_end})', color='purple', linewidth=3)
+
+# Optionally, plot the individual sigmoids that form the tower
+plt.plot(x_values, sigmoid(k_steepness * (x_values - a_start)), label=f'sigmoid(k(x - {a_start}))', linestyle='--', color='green', alpha=0.6)
+plt.plot(x_values, sigmoid(k_steepness * (x_values - b_end)), label=f'sigmoid(k(x - {b_end}))', linestyle=':', color='orange', alpha=0.6)
+
+# Add horizontal lines to clarify the plateau
+plt.axhline(y=0, color='gray', linestyle='-', linewidth=0.8)
+plt.axhline(y=1, color='gray', linestyle='-', linewidth=0.8)
+
+plt.title('Creating a "Tower" (Rectangular Pulse) with Two Sigmoid Functions')
+plt.xlabel('x')
+plt.ylabel('f(x)')
+plt.grid(True)
+plt.legend()
+plt.ylim(-0.2, 1.2) # Set y-axis limits to clearly show 0 and 1
+plt.show()
+
+# --- Example of a slightly different tower ---
+print("\n--- Plotting another tower example ---")
+k_steepness_2 = 20
+a_start_2 = -1.0
+b_end_2 = 1.0
+y_tower_2 = tower_function(x_values, k_steepness_2, a_start_2, b_end_2)
+
+plt.figure(figsize=(10, 6))
+plt.plot(x_values, y_tower_2, label=f'Tower Function (k={k_steepness_2}, a={a_start_2}, b={b_end_2})', color='teal', linewidth=3)
+plt.axhline(y=0, color='gray', linestyle='-', linewidth=0.8)
+plt.axhline(y=1, color='gray', linestyle='-', linewidth=0.8)
+plt.title('Another Tower Function Example (Sharper, Centered)')
+plt.xlabel('x')
+plt.ylabel('f(x)')
+plt.grid(True)
+plt.legend()
+plt.ylim(-0.2, 1.2)
+plt.show()
