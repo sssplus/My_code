@@ -1,40 +1,27 @@
-import art
-
-print(art.logo)
-
-alphabet = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u',
-            'v', 'w', 'x', 'y', 'z']
+from art import logo
+print(logo)
 
 
-def caesar(original_text, shift_amount, encode_or_decode):
-    output_text = ""
-    if encode_or_decode == "decode":
-        shift_amount *= -1
-
-    for letter in original_text:
-
-        if letter not in alphabet:
-            output_text += letter
-        else:
-            shifted_position = alphabet.index(letter) + shift_amount
-            shifted_position %= len(alphabet)
-            output_text += alphabet[shifted_position]
-    print(f"Here is the {encode_or_decode}d result: {output_text}")
+def find_highest_bidder(bidding_record):
+    highest_bid = 0
+    winner = ""
+    for bidder in bidding_record:
+        bid_amount = bidding_record[bidder]
+        if bid_amount > highest_bid:
+            highest_bid = bid_amount
+            winner = bidder
+    print(f"The winner is {winner} with a bid of ${highest_bid}")
 
 
-should_continue = True
-
-while should_continue:
-
-    direction = input("Type 'encode' to encrypt, type 'decode' to decrypt:\n").lower()
-    text = input("Type your message:\n").lower()
-    shift = int(input("Type the shift number:\n"))
-
-    caesar(original_text=text, shift_amount=shift, encode_or_decode=direction)
-
-    restart = input("Type 'yes' if you want to go again. Otherwise, type 'no'.\n").lower()
-    if restart == "no":
-        should_continue = False
-        print("Goodbye")
-
-
+bids = {}
+continue_bidding = True
+while continue_bidding:
+    name = input("What is your name?: ")
+    price = int(input("What is your bid?: $"))
+    bids[name] = price
+    should_continue = input("Are there any other bidders? Type 'yes or 'no'.\n")
+    if should_continue == "no":
+        continue_bidding = False
+        find_highest_bidder(bids)
+    elif should_continue == "yes":
+        print("\n" * 20)
