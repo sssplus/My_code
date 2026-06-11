@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chronicles of the Shattered Realm — Lego RPG</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game-wrapper">
+
+    <!-- Loading screen (shown until JS boots) -->
+    <div id="loading-screen">
+      <div class="lego-brick red">C</div>
+      <div class="lego-brick blue">H</div>
+      <div class="lego-brick green">R</div>
+      <div class="lego-brick gold">O</div>
+      <div class="lego-brick purple">N</div>
+      <div class="lego-brick orange">I</div>
+      <p>Loading the Shattered Realm...</p>
+    </div>
+
+    <!-- Main game canvas -->
+    <canvas id="gameCanvas" tabindex="0"></canvas>
+
+    <!-- Overlay UI hint (hidden by default, shown via JS) -->
+    <div id="controls-hint" style="display:none;">
+      <span>Arrow Keys / WASD — Move</span>
+      <span>E / Enter — Interact</span>
+      <span>M — Menu</span>
+      <span>P — Save</span>
+    </div>
+  </div>
+
+  <!-- Scripts: load in dependency order -->
+  <script src="js/data.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/combat.js"></script>
+  <script src="js/dialog.js"></script>
+  <script src="js/systems.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/chargen.js"></script>
+  <script src="js/main.js"></script>
+
+  <script>
+    // Hide loading screen once scripts are ready
+    document.addEventListener('DOMContentLoaded', function() {
+      setTimeout(function() {
+        var ls = document.getElementById('loading-screen');
+        if (ls) ls.style.display = 'none';
+        var canvas = document.getElementById('gameCanvas');
+        if (canvas) canvas.focus();
+      }, 200);
+    });
+  </script>
+</body>
+</html>
