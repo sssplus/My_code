@@ -223,6 +223,32 @@ var DATA = {
         { threshold:0.65, name:'Claiming the Shards',  moves:['heartstone_blast','void_rend','mass_fear'] },
         { threshold:0.30, name:'The Final Shape',      moves:['world_reshape','void_annihilation','despair'] }
       ]
+    },
+    crypt_shade: {
+      id:'crypt_shade', name:'Crypt Shade', tier:2, hp:35, atk:9, def:5, mag:14, agi:13,
+      torsoColor:'#1B2A34', legColor:'#81007B', headColor:'#1B2A34',
+      xp:38, gold:[8,20], drops:['dark_shard'],
+      aiType:'smart', prefersMagic:true, moves:['void_strike','attack','ancient_curse']
+    },
+    bog_horror: {
+      id:'bog_horror', name:'Bog Horror', tier:3, hp:180, atk:22, def:16, mag:8, agi:7,
+      torsoColor:'#3D5C1A', legColor:'#304A14', headColor:'#3D5C1A',
+      xp:220, gold:[60,120], drops:['heartstone_fragment','health_potion'],
+      aiType:'boss', phases:[
+        { threshold:1.0,  name:'Lurking',      moves:['attack','shield_bash','attack','regen'] },
+        { threshold:0.55, name:'Rampaging',    moves:['dual_strike','berserk_charge','attack','regen'] },
+        { threshold:0.25, name:'Death Throes', moves:['berserk_charge','berserk_charge','last_stand','regen'] }
+      ]
+    },
+    tomb_sentinel: {
+      id:'tomb_sentinel', name:'Tomb Sentinel', tier:3, hp:210, atk:25, def:22, mag:12, agi:8,
+      torsoColor:'#E4CD9E', legColor:'#DBA000', headColor:'#D4B87A',
+      xp:260, gold:[80,150], drops:['iron_plate','heartstone_fragment'],
+      aiType:'boss', signature:'void_strike', phases:[
+        { threshold:1.0,  name:'Awakening',       moves:['taunt','attack','shield_bash','defend'] },
+        { threshold:0.60, name:'Wrath of the Sand',moves:['dual_strike','iron_cyclone','attack','shield_bash'] },
+        { threshold:0.25, name:'Undying Vigil',   moves:['berserk_charge','last_stand','iron_cyclone','regen'] }
+      ]
     }
   },
 
@@ -278,7 +304,41 @@ var DATA = {
     13:['#DDEEFF','#C8DFFF']    // snow
   },
 
-  WALKABLE: new Set([1,2,3,5,8,9,10]),
+  WALKABLE: new Set([1,2,3,5,8,9,10,12]),
+
+  // ── Environment Configuration ───────────────────────────────
+  // Global defaults for the world; zones override via their `env` block:
+  //   env: { ambient, wildTiles, encounterChance, encounterMinFrames, encounterTable }
+  ENVIRONMENT: {
+    encounter: {
+      minFrames:   180,    // frames of wilderness walking between checks
+      chance:      0.012,  // per-step chance once minFrames reached
+      groupChance: 0.3     // chance the encounter spawns 2 enemies
+    },
+    // Tiles that can trigger random encounters (world-map default)
+    wildTiles: [1, 3, 5, 12],
+    // Per-tile enemy pools for random encounters
+    encounterTables: {
+      1:  ['bandit', 'highland_wolf'],     // grass
+      3:  ['forest_mage', 'highland_wolf'],// forest
+      5:  ['bandit', 'bandit'],            // desert
+      12: ['moor_soldier', 'bandit']       // swamp
+    },
+    // Named ambient overlays zones can reference (drawn over the view)
+    ambients: {
+      forest:  'rgba(16,46,24,0.14)',
+      dungeon: 'rgba(4,4,16,0.34)',
+      desert:  'rgba(255,196,90,0.10)',
+      holy:    'rgba(255,240,200,0.08)',
+      swamp:   'rgba(38,58,20,0.20)'
+    },
+    // Where the player lands when entering a zone, unless the
+    // marker/dungeon entry defines its own entryX/entryY
+    entryDefaults: {
+      city:    { x:6, y:6 },
+      dungeon: { x:2, y:8 }
+    }
+  },
 
   // ── World Map (26 wide × 18 tall) ───────────────────────────
   WORLD_MAP: {
@@ -321,19 +381,19 @@ var DATA = {
       // Row 17
       [0,0,0,0,0,0,4,4,4,4,4,4,4,4,4,4,4,4,4,4,0,0,0,0,0,0]
     ],
-    // Kingdom markers on world map
+    // Kingdom markers on world map (each sits on a walkable door tile)
     markers: [
       { x:8,  y:6,  kingdom:'valdris',  name:'Ironhold',       zone:'ironhold' },
       { x:10, y:5,  kingdom:'sylvara',  name:'Moonsong',       zone:'moonsong' },
       { x:10, y:11, kingdom:'solheim',  name:'Aurum Cathedral',zone:'aurum' },
-      { x:4,  y:3,  kingdom:'drakmoor', name:'Ashenkeep',      zone:'ashenkeep' },
-      { x:19, y:13, kingdom:'veranthos',name:'Dune Throne',    zone:'dune_throne' }
+      { x:3,  y:3,  kingdom:'drakmoor', name:'Ashenkeep',      zone:'ashenkeep' },
+      { x:21, y:13, kingdom:'veranthos',name:'Dune Throne',    zone:'dune_throne' }
     ],
-    // Dungeon entrances
+    // Dungeon entrances (each sits on a walkable tile)
     dungeons: [
       { x:9, y:3, name:'Ashwood Ruins',      zone:'ashwood_dungeon' },
-      { x:5, y:9, name:'Bogmire Crypts',     zone:'bogmire_dungeon' },
-      { x:16,y:5, name:'Spice Road Tombs',   zone:'spice_dungeon'   }
+      { x:3, y:6, name:'Bogmire Crypts',     zone:'bogmire_dungeon' },
+      { x:18,y:5, name:'Spice Road Tombs',   zone:'spice_dungeon'   }
     ]
   },
 
@@ -342,6 +402,7 @@ var DATA = {
     ironhold: {
       name:'Ironhold', kingdom:'valdris', width:16, height:12,
       music:'highland', bgColor:'#C91A09',
+      env: { encounterChance:0 },
       tiles: [
         [7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7],
         [7,8,8,8,8,8,8,8,8,8,8,8,8,8,8,7],
@@ -366,6 +427,7 @@ var DATA = {
     moonsong: {
       name:'Moonsong', kingdom:'sylvara', width:16, height:12,
       music:'forest', bgColor:'#237841',
+      env: { ambient:'forest', encounterChance:0 },
       tiles: [
         [3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3],
         [3,8,8,8,8,8,8,8,8,8,8,8,8,8,8,3],
@@ -389,6 +451,7 @@ var DATA = {
     ashwood_dungeon: {
       name:'Ashwood Ruins — B1', kingdom:null, width:16, height:12,
       music:'dungeon', bgColor:'#1B2A34',
+      env: { ambient:'dungeon', wildTiles:[10], encounterChance:0.02, encounterTable:['bandit','crypt_shade'] },
       tiles: [
         [11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11],
         [11,10,10,10,10,10,10,10,10,10,10,10,10,10,10,11],
@@ -410,6 +473,131 @@ var DATA = {
         { type:'iron_warlord',x:12,y:5,  isBoss:true }
       ],
       exits: [{ x:2, y:10, targetZone:'world', targetX:9, targetY:3 }]
+    },
+    aurum: {
+      name:'Aurum Cathedral', kingdom:'solheim', width:16, height:12,
+      music:'holy', bgColor:'#F2CD37',
+      env: { ambient:'holy', encounterChance:0 },
+      tiles: [
+        [7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7],
+        [7,8,8,8,8,8,8,8,8,8,8,8,8,8,8,7],
+        [7,8,7,8,8,8,2,2,8,8,8,7,8,8,8,7],
+        [7,8,8,8,6,8,2,2,8,6,8,8,8,8,8,7],
+        [7,8,8,8,8,8,2,2,8,8,8,8,8,7,8,7],
+        [7,8,7,8,8,2,2,2,2,8,8,7,8,8,8,7],
+        [7,8,8,8,8,2,2,2,2,8,8,8,8,8,8,7],
+        [7,8,8,8,6,8,2,2,8,6,8,8,8,8,8,7],
+        [7,8,7,8,8,8,2,2,8,8,8,7,8,8,8,7],
+        [7,8,8,8,8,8,2,2,8,8,8,8,8,8,8,7],
+        [7,8,8,8,8,8,9,2,8,8,8,8,8,8,8,7],
+        [7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7]
+      ],
+      npcs: [
+        { id:'high_cleric', name:'High Cleric Oren', x:7, y:2, color:'#F2CD37', headColor:'#E4CD9E', dialog:'priest_dialog' },
+        { id:'calla',       name:'Calla Vane',       x:11, y:6, color:'#9BA19D', headColor:'#E4CD9E', dialog:'calla_intro', isRomance:true }
+      ],
+      exits: [{ x:6, y:10, targetZone:'world', targetX:10, targetY:11 }]
+    },
+    ashenkeep: {
+      name:'Ashenkeep', kingdom:'drakmoor', width:16, height:12,
+      music:'moor', bgColor:'#3D5C1A',
+      env: { ambient:'swamp', encounterChance:0 },
+      tiles: [
+        [11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11],
+        [11,8,8,8,8,8,8,8,8,8,8,8,8,8,8,11],
+        [11,8,11,11,8,8,8,8,8,11,11,8,8,8,8,11],
+        [11,8,11,8,8,8,2,2,8,11,8,8,12,12,8,11],
+        [11,8,11,8,8,2,2,2,2,8,8,8,12,12,8,11],
+        [11,8,8,8,2,2,8,8,2,2,8,8,8,8,8,11],
+        [11,8,8,2,2,8,8,8,8,2,2,8,8,8,8,11],
+        [11,8,12,8,8,8,8,8,8,8,8,8,8,8,8,11],
+        [11,8,12,12,8,8,8,8,8,11,11,8,8,8,8,11],
+        [11,8,8,8,8,8,8,8,8,8,8,8,8,8,8,11],
+        [11,8,8,8,8,8,9,8,8,8,8,8,8,8,8,11],
+        [11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11]
+      ],
+      npcs: [
+        { id:'warden',      name:'Warden Maeve',  x:7, y:2, color:'#3D5C1A', dialog:'ashen_warden_dialog' },
+        { id:'moor_guard',  name:'Moor Guard',    x:3, y:7, color:'#6C6E68', dialog:'ashen_guard_dialog' }
+      ],
+      exits: [{ x:6, y:10, targetZone:'world', targetX:3, targetY:3 }]
+    },
+    dune_throne: {
+      name:'Dune Throne', kingdom:'veranthos', width:16, height:12,
+      music:'desert', bgColor:'#E4CD9E',
+      env: { ambient:'desert', encounterChance:0 },
+      tiles: [
+        [4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4],
+        [4,5,5,5,5,5,8,8,8,5,5,5,5,5,5,4],
+        [4,5,4,5,5,5,8,8,8,5,5,4,5,5,5,4],
+        [4,5,5,5,5,8,8,8,8,8,5,5,5,5,5,4],
+        [4,5,5,5,5,8,8,8,8,8,5,5,5,4,5,4],
+        [4,5,4,5,2,2,8,8,8,2,2,5,5,5,5,4],
+        [4,5,5,2,2,5,2,2,2,5,2,2,5,5,5,4],
+        [4,5,5,5,5,5,2,2,2,5,5,5,5,5,5,4],
+        [4,5,4,5,5,5,2,2,2,5,4,5,5,5,5,4],
+        [4,5,5,5,5,5,2,2,2,5,5,5,5,5,5,4],
+        [4,5,5,5,5,5,9,2,5,5,5,5,5,5,5,4],
+        [4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4]
+      ],
+      npcs: [
+        { id:'vizier',  name:'Vizier Rashan',  x:7, y:2,  color:'#DBA000', headColor:'#E4CD9E', dialog:'dune_vizier_dialog' },
+        { id:'avira',   name:'Princess Avira', x:8, y:4,  color:'#237841', dialog:'avira_intro', isRomance:true },
+        { id:'zaff',    name:'Zaff the Trader',x:12, y:7, color:'#FE8A18', headColor:'#E4CD9E', dialog:'desert_merchant_dialog', isShop:true }
+      ],
+      exits: [{ x:6, y:10, targetZone:'world', targetX:21, targetY:13 }]
+    },
+    bogmire_dungeon: {
+      name:'Bogmire Crypts — B1', kingdom:null, width:16, height:12,
+      music:'dungeon', bgColor:'#1B2A34',
+      env: { ambient:'dungeon', wildTiles:[10], encounterChance:0.02, encounterTable:['moor_soldier','crypt_shade'] },
+      tiles: [
+        [11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11],
+        [11,10,10,10,10,6,6,10,10,10,10,10,10,10,10,11],
+        [11,10,11,11,10,6,6,10,10,11,11,10,10,11,10,11],
+        [11,10,11,10,10,10,10,10,10,11,10,10,10,11,10,11],
+        [11,10,10,10,10,11,10,10,10,10,10,10,10,10,10,11],
+        [11,10,10,10,10,11,10,10,11,10,6,6,10,10,10,11],
+        [11,10,10,11,10,10,10,10,11,10,6,6,10,10,10,11],
+        [11,10,10,11,10,10,10,10,10,10,10,11,10,10,10,11],
+        [11,10,10,10,10,10,10,10,10,10,10,10,10,10,10,11],
+        [11,10,11,10,10,6,6,10,10,10,11,10,10,10,10,11],
+        [11,10,9,10,10,10,10,10,10,10,10,10,10,10,10,11],
+        [11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11]
+      ],
+      npcs: [],
+      enemies: [
+        { type:'moor_soldier', x:6,  y:3, patrol:true },
+        { type:'crypt_shade',  x:10, y:7, patrol:true },
+        { type:'bog_horror',   x:13, y:4, isBoss:true }
+      ],
+      exits: [{ x:2, y:10, targetZone:'world', targetX:3, targetY:6 }]
+    },
+    spice_dungeon: {
+      name:'Spice Road Tombs — B1', kingdom:null, width:16, height:12,
+      music:'dungeon', bgColor:'#1B2A34',
+      env: { ambient:'dungeon', wildTiles:[10,5], encounterChance:0.02, encounterTable:['bandit','crypt_shade'] },
+      tiles: [
+        [11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11],
+        [11,10,10,10,5,5,10,10,10,10,10,10,10,10,10,11],
+        [11,10,11,11,10,10,10,10,10,11,11,10,10,11,10,11],
+        [11,10,11,10,10,10,10,5,10,11,10,10,10,11,10,11],
+        [11,10,10,10,10,11,10,5,10,10,10,10,10,10,10,11],
+        [11,10,10,10,10,11,10,10,11,10,10,10,10,10,10,11],
+        [11,10,10,11,5,10,10,10,11,10,10,11,10,10,10,11],
+        [11,10,10,11,5,10,10,10,10,10,10,11,10,10,10,11],
+        [11,10,10,10,10,10,10,10,10,10,10,10,10,10,10,11],
+        [11,10,11,10,10,10,10,10,10,10,11,10,5,5,10,11],
+        [11,10,9,10,10,10,10,10,10,10,10,10,10,10,10,11],
+        [11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11]
+      ],
+      npcs: [],
+      enemies: [
+        { type:'bandit',        x:5,  y:3, patrol:true },
+        { type:'crypt_shade',   x:9,  y:8, patrol:true },
+        { type:'tomb_sentinel', x:12, y:4, isBoss:true }
+      ],
+      exits: [{ x:2, y:10, targetZone:'world', targetX:18, targetY:5 }]
     }
   },
 
@@ -527,6 +715,89 @@ var DATA = {
                ]},
         mf4: { speaker:'Malachar', text:"(quietly)\nYes. They were.\n\n(He raises his hand. The shards rise.)\n\nShow me what you've become. Then we'll see if one of us deserves to finish this.", emotion:'resolute', choices:null,
                action:'start_boss', enemyId:'malachar' }
+      }
+    },
+    priest_dialog: {
+      start:'pd1',
+      nodes: {
+        pd1: { speaker:'High Cleric Oren', text:"The Cathedral stands because the faithful held the line when kingdoms forgot how.\n\nWhat brings you to Aurum?", emotion:'serene',
+               choices:[
+                { text:"I'm looking for the Heartstone shard.", next:'pd2' },
+                { text:"Tell me about Solheim.", next:'pd3' }
+               ]},
+        pd2: { speaker:'High Cleric Oren', text:"Then you carry a heavier burden than you look. The shard rests in the Reliquary below... guarded by what the old orders left behind.\n\nI will not stop you. But I will pray for you.", emotion:'grave', choices:null,
+               action:'quest_start', questId:'main_quest_2' },
+        pd3: { speaker:'High Cleric Oren', text:"Solheim endures. We have outlasted three wars, two famines, and one very determined necromancer.\n\n(beat)\nFour, actually. The fourth retired to a fishing village. We don't discuss that.", emotion:'wry', choices:null }
+      }
+    },
+    calla_intro: {
+      start:'ci1',
+      nodes: {
+        ci1: { speaker:'Calla Vane', text:"Before you say anything — I'm not lost, I'm not in trouble, and I don't need saving.\n\nI'm between contracts. That's different.", emotion:'sharp',
+               choices:[
+                { text:"What kind of contracts?", next:'ci2' },
+                { text:"I wasn't going to offer.", next:'ci3' }
+               ]},
+        ci2: { speaker:'Calla Vane', text:"The kind that require someone who can fight, negotiate, and disappear.\n\nThe kind you're probably about to offer me.\n\n...What's the job?", emotion:'considering', choices:null,
+               action:'romance_meet', lead:'calla_vane' },
+        ci3: { speaker:'Calla Vane', text:"(a beat)\nHm.\n\nI might have just insulted someone I don't know anything about. That's not like me.\n\nCalla Vane. What are you after?", emotion:'recalibrating', choices:null,
+               action:'romance_meet', lead:'calla_vane' }
+      }
+    },
+    ashen_warden_dialog: {
+      start:'aw1',
+      nodes: {
+        aw1: { speaker:'Warden Maeve', text:"You're not from the Moor. I can tell. Drakmoor mud has a particular weight to it — you're carrying lighter ground.\n\nState your purpose.", emotion:'measured',
+               choices:[
+                { text:"I'm tracking something that woke in the ruins.", next:'aw2' },
+                { text:"Just passing through.", next:'aw3' }
+               ]},
+        aw2: { speaker:'Warden Maeve', text:"The Bogmire crypts. Something's been disturbing the dead down there.\n\nMy wardens won't go below the first landing. I won't send them — the dead down there died angry. But if you're the type who walks into those places willingly...\n\nWe'd owe you. Drakmoor pays its debts.", emotion:'weighing', choices:null },
+        aw3: { speaker:'Warden Maeve', text:"There is no 'through' in the Moor. There is 'in' and 'out'. We keep the out-roads open.\n\nDon't step off the paths. The ground here swallows people who stop paying attention.", emotion:'warning', choices:null }
+      }
+    },
+    ashen_guard_dialog: {
+      start:'ag1',
+      nodes: {
+        ag1: { speaker:'Moor Guard', text:"Southern paths are closed. Something's moving in the bogs.\n\nWarden's orders.", emotion:'stern', choices:null }
+      }
+    },
+    dune_vizier_dialog: {
+      start:'dv1',
+      nodes: {
+        dv1: { speaker:'Vizier Rashan', text:"Veranthos does not receive travelers. It tolerates them.\n\nYou have arrived, which means the Princess permitted it. Whatever she told you — she was testing you. She tests everyone.\n\nYou should assume you are still being tested.", emotion:'smooth',
+               choices:[
+                { text:"What does she want?", next:'dv2' },
+                { text:"And am I passing?", next:'dv3' }
+               ]},
+        dv2: { speaker:'Vizier Rashan', text:"An alliance that doesn't require Veranthos to sacrifice anything.\n\nShe is the Dune Throne's daughter. She negotiates from the position that the desert can outlast anything.\n\n...She is not wrong.", emotion:'dry', choices:null },
+        dv3: { speaker:'Vizier Rashan', text:"(long pause)\n\nI've seen sixty-three alliance seekers in this hall. Forty-one left with nothing. Nineteen left with a contract they later regretted.\n\nThe three who succeeded asked better questions than that.", emotion:'neutral', choices:null }
+      }
+    },
+    avira_intro: {
+      start:'av1',
+      nodes: {
+        av1: { speaker:'Princess Avira', text:"I've read every report on the Heartstone situation. I've spoken to three archivists, two surviving veterans of the last Malachar incident, and one very unhelpful spirit in a jar.\n\nYou're the variable no one accounted for. Interesting.", emotion:'assessing',
+               choices:[
+                { text:"What do you need from me?", next:'av2' },
+                { text:"What did the spirit in the jar say?", next:'av3' }
+               ]},
+        av2: { speaker:'Princess Avira', text:"Nothing yet. I need to understand what you actually are first.\n\nNot your origin. Not your title. What you do when things go wrong and there's no good option left.\n\nSo. Walk me through the last time that happened.", emotion:'direct', choices:null,
+               action:'romance_meet', lead:'avira' },
+        av3: { speaker:'Princess Avira', text:"That you were coming. And that you'd ask about the jar.\n\n(she watches you carefully)\n\nIt bothers me more than I expected that it was right.", emotion:'unsettled', choices:null,
+               action:'romance_meet', lead:'avira' }
+      }
+    },
+    desert_merchant_dialog: {
+      start:'dm1',
+      nodes: {
+        dm1: { speaker:'Zaff the Trader', text:"Zaff's wares! Sand-tested, sun-blessed, and only slightly cursed!\n\nThe 'slightly' is very important. What can I get you?", emotion:'cheerful',
+               choices:[
+                { text:"Show me what you have.", next:'dm_shop', action:'open_shop' },
+                { text:"What do you mean 'slightly cursed'?", next:'dm2' }
+               ]},
+        dm2: { speaker:'Zaff the Trader', text:"The elixirs are fine. The scrolls are fine. The amulet in the blue box — that one I recommend not wearing near water.\n\nBuy the elixirs. Skip the amulet. You'll be great.", emotion:'reassuring', choices:null },
+        dm_shop: { speaker:'Zaff the Trader', text:"Excellent taste. Mostly.", emotion:'neutral', choices:null, action:'open_shop' }
       }
     }
   },

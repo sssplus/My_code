@@ -17,8 +17,7 @@ var WORLD = (function() {
   var VIEW_H = 480;  // world view area
 
   var encounterTimer = 0;
-  var ENCOUNTER_MIN  = 180;  // frames between encounter checks
-  var ENCOUNTER_CHANCE = 0.012;
+  var zoneEnv        = null;  // merged env for current zone
 
   // ── Load zone ──────────────────────────────────────────────
   function loadZone(id, startX, startY) {
@@ -75,6 +74,18 @@ var WORLD = (function() {
         });
       });
     }
+
+    // Merge global env defaults with zone overrides
+    var globalEnv = DATA.ENVIRONMENT;
+    var zoneOverride = currentZone.env || {};
+    zoneEnv = {
+      minFrames:       zoneOverride.encounterMinFrames !== undefined ? zoneOverride.encounterMinFrames : globalEnv.encounter.minFrames,
+      chance:          zoneOverride.encounterChance   !== undefined ? zoneOverride.encounterChance    : globalEnv.encounter.chance,
+      groupChance:     globalEnv.encounter.groupChance,
+      wildTiles:       zoneOverride.wildTiles || globalEnv.wildTiles,
+      encounterTable:  zoneOverride.encounterTable || null,
+      ambient:         zoneOverride.ambient ? (globalEnv.ambients[zoneOverride.ambient] || null) : null
+    };
 
     // Position player
     if (startX !== undefined && startY !== undefined) {
@@ -181,33 +192,32 @@ var WORLD = (function() {
   // ── Random encounters ──────────────────────────────────────
   function handleRandomEncounter() {
     var p = PLAYER.get();
-    if (!p || !currentZone) return;
+    if (!p || !currentZone || !zoneEnv) return;
+    if (zoneEnv.chance <= 0) return;
 
-    // Only in wilderness tiles
     var row = currentZone.tiles[p.y];
     if (!row) return;
     var tileId = row[p.x];
-    var wildTiles = [DATA.TILE.GRASS, DATA.TILE.FOREST, DATA.TILE.DESERT, DATA.TILE.SWAMP];
-    if (!wildTiles.includes(tileId)) { encounterTimer = 0; return; }
+    if (!zoneEnv.wildTiles.includes(tileId)) { encounterTimer = 0; return; }
 
     encounterTimer++;
-    if (encounterTimer < ENCOUNTER_MIN) return;
-    if (Math.random() > ENCOUNTER_CHANCE) return;
+    if (encounterTimer < zoneEnv.minFrames) return;
+    if (Math.random() > zoneEnv.chance) return;
 
     encounterTimer = 0;
     triggerRandomCombat(tileId);
   }
 
   function triggerRandomCombat(tileId) {
-    var enemyPools = {
-      [DATA.TILE.GRASS]:  ['bandit', 'highland_wolf'],
-      [DATA.TILE.FOREST]: ['forest_mage', 'highland_wolf'],
-      [DATA.TILE.DESERT]: ['bandit', 'bandit'],
-      [DATA.TILE.SWAMP]:  ['moor_soldier', 'bandit']
-    };
-    var pool = enemyPools[tileId] || ['bandit'];
+    var pool;
+    if (zoneEnv && zoneEnv.encounterTable) {
+      pool = zoneEnv.encounterTable;
+    } else {
+      pool = (DATA.ENVIRONMENT.encounterTables[tileId]) || ['bandit'];
+    }
     var enemyType = pool[Math.floor(Math.random()*pool.length)];
-    var count = Math.random() < 0.3 ? 2 : 1;
+    var groupChance = zoneEnv ? zoneEnv.groupChance : DATA.ENVIRONMENT.encounter.groupChance;
+    var count = Math.random() < groupChance ? 2 : 1;
     var enemies = [];
     for (var i = 0; i < count; i++) enemies.push({ type: enemyType, id: enemyType+'_rand'+i });
     if (onCombat) onCombat(enemies, false);
@@ -298,6 +308,12 @@ var WORLD = (function() {
 
     // Draw tilemap
     ENGINE.drawMap(currentZone, offsetX, offsetY, VIEW_W, VIEW_H);
+
+    // Ambient environment overlay
+    if (zoneEnv && zoneEnv.ambient) {
+      ctx.fillStyle = zoneEnv.ambient;
+      ctx.fillRect(offsetX, offsetY, VIEW_W, VIEW_H);
+    }
 
     var cam = ENGINE.getCamera();
 
