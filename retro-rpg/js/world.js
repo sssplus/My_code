@@ -25,12 +25,13 @@ var WORLD = (function() {
 
     if (id === 'world') {
       currentZone = {
-        name:   'World Map — Aethoria',
-        width:  DATA.WORLD_MAP.width,
-        height: DATA.WORLD_MAP.height,
-        tiles:  DATA.WORLD_MAP.tiles,
-        npcs:   [],
-        exits:  [],
+        name:       'World Map — Aethoria',
+        width:      Infinity,
+        height:     Infinity,
+        procedural: true,
+        getTile:    function(x, y) { return TERRAIN.tileAt(x, y); },
+        npcs:       [],
+        exits:      [],
         isWorldMap: true
       };
     } else {
@@ -108,14 +109,19 @@ var WORLD = (function() {
     ENGINE.setCamera(p.x, p.y, currentZone.width, currentZone.height, VIEW_W/TILE, VIEW_H/TILE);
   }
 
+  // ── Tile access (handles finite arrays and procedural zones) ─
+  function currentTileAt(tx, ty) {
+    if (!currentZone) return DATA.TILE.VOID;
+    if (currentZone.procedural) return currentZone.getTile(tx, ty);
+    if (tx < 0 || ty < 0 || tx >= currentZone.width || ty >= currentZone.height) return DATA.TILE.VOID;
+    var row = currentZone.tiles[ty];
+    return row ? row[tx] : DATA.TILE.VOID;
+  }
+
   // ── Collision ──────────────────────────────────────────────
   function isTileWalkable(tx, ty) {
     if (!currentZone) return false;
-    if (tx < 0 || ty < 0 || tx >= currentZone.width || ty >= currentZone.height) return false;
-    var row = currentZone.tiles[ty];
-    if (!row) return false;
-    var tileId = row[tx];
-    return DATA.WALKABLE.has(tileId);
+    return DATA.WALKABLE.has(currentTileAt(tx, ty));
   }
 
   function isOccupiedByNpc(tx, ty) {
@@ -195,9 +201,7 @@ var WORLD = (function() {
     if (!p || !currentZone || !zoneEnv) return;
     if (zoneEnv.chance <= 0) return;
 
-    var row = currentZone.tiles[p.y];
-    if (!row) return;
-    var tileId = row[p.x];
+    var tileId = currentTileAt(p.x, p.y);
     if (!zoneEnv.wildTiles.includes(tileId)) { encounterTimer = 0; return; }
 
     encounterTimer++;

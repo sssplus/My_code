@@ -50,6 +50,11 @@ var GAME = (function() {
     canvas.height = H;
     ctx    = ENGINE.init(canvas);
 
+    // Procedural overworld seed + pixel-art tileset (procedural fallback
+    // renders until the atlas finishes loading, so boot never blocks).
+    TERRAIN.init(20260612);
+    ENGINE.loadTileset('assets/tileset.png');
+
     // Keyboard for chargen name entry (printable chars only; ENGINE handles the rest)
     document.addEventListener('keydown', function(e) {
       if (currentState === STATE.CHARGEN && !e.ctrlKey && !e.altKey && !e.metaKey) {

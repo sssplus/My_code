@@ -14,6 +14,11 @@ var ENGINE = (function() {
   var frameCount = 0;
   var captureCallback = null;  // set while waiting for a rebind keypress
 
+  // ── Pixel-art tileset ──────────────────────────────────────
+  var tilesetImg   = null;
+  var tilesetReady = false;
+  var TILE_COUNT   = 14;   // ids 0..13 present in assets/tileset.png
+
   // Keys whose browser default (scrolling etc.) must be suppressed
   var PREVENT_DEFAULT = new Set([
     'ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','Tab'
@@ -134,6 +139,22 @@ var ENGINE = (function() {
     return ctx;
   }
 
+  // Load the pixel-art tileset. cb fires once (loaded or failed) so boot
+  // can proceed even if the asset is missing (falls back to procedural tiles).
+  function loadTileset(src, cb) {
+    var img = new Image();
+    img.onload = function() {
+      tilesetImg = img;
+      tilesetReady = true;
+      if (cb) cb(true);
+    };
+    img.onerror = function() {
+      tilesetReady = false;
+      if (cb) cb(false);
+    };
+    img.src = src;
+  }
+
   function getCanvas() { return canvas; }
   function getCtx()    { return ctx; }
   function getFrame()  { return frameCount; }
@@ -211,9 +232,16 @@ var ENGINE = (function() {
   }
 
   // ── Camera ─────────────────────────────────────────────────
+  // viewW/viewH are passed in TILES (VIEW_W/TILE). Finite maps keep the
+  // original clamped follow; infinite procedural maps center the player.
   function setCamera(x, y, mapW, mapH, viewW, viewH) {
-    camera.x = Math.max(0, Math.min(x - viewW/2/TILE, mapW - viewW/TILE));
-    camera.y = Math.max(0, Math.min(y - viewH/2/TILE, mapH - viewH/TILE));
+    if (mapW !== Infinity && mapH !== Infinity) {
+      camera.x = Math.max(0, Math.min(x - viewW/2/TILE, mapW - viewW/TILE));
+      camera.y = Math.max(0, Math.min(y - viewH/2/TILE, mapH - viewH/TILE));
+      return;
+    }
+    camera.x = x - viewW/2;
+    camera.y = y - viewH/2;
   }
   function getCamera() { return camera; }
 
@@ -282,6 +310,20 @@ var ENGINE = (function() {
   // ── Tile renderer ──────────────────────────────────────────
   function drawTile(tileId, sx, sy, tileSize) {
     tileSize = tileSize || TILE;
+
+    // Pixel-art path: blit the tile from the atlas, nearest-neighbor.
+    if (tilesetReady && tileId >= 0 && tileId < TILE_COUNT) {
+      ctx.drawImage(tilesetImg, tileId * TILE, 0, TILE, TILE, sx, sy, tileSize, tileSize);
+      // Animated shimmer band over water for a touch of life.
+      if (tileId === DATA.TILE.WATER) {
+        var band = Math.floor((frameCount * 0.4 + sx * 0.5) % tileSize);
+        ctx.fillStyle = 'rgba(180,220,255,0.18)';
+        ctx.fillRect(sx, sy + band, tileSize, 2);
+      }
+      return;
+    }
+
+    // Procedural fallback (used until the atlas loads, or if it's missing).
     var colors = DATA.TILE_COLORS[tileId] || ['#FF00FF','#CC00CC'];
     var c0 = colors[0], c1 = colors[1];
     var x = sx, y = sy, w = tileSize, h = tileSize;
@@ -422,13 +464,16 @@ var ENGINE = (function() {
     var tY = Math.floor(camera.y);
     var tilesW = Math.ceil(viewW / TILE) + 1;
     var tilesH = Math.ceil(viewH / TILE) + 1;
+    // Procedural maps supply tiles on demand and have no fixed bounds.
+    var proc = !!(mapData.procedural && typeof mapData.getTile === 'function');
 
-    for (var ty = tY; ty < Math.min(tY + tilesH, mapData.height); ty++) {
-      for (var tx = tX; tx < Math.min(tX + tilesW, mapData.width); tx++) {
-        if (ty < 0 || tx < 0) continue;
-        var row = mapData.tiles[ty];
-        if (!row) continue;
-        var tileId = row[tx];
+    for (var ty = tY; ty < tY + tilesH; ty++) {
+      if (!proc && (ty < 0 || ty >= mapData.height)) continue;
+      var row = proc ? null : mapData.tiles[ty];
+      if (!proc && !row) continue;
+      for (var tx = tX; tx < tX + tilesW; tx++) {
+        if (!proc && (tx < 0 || tx >= mapData.width)) continue;
+        var tileId = proc ? mapData.getTile(tx, ty) : row[tx];
         var sx = offsetX + (tx - tX) * TILE - (camera.x - tX) * TILE;
         var sy = offsetY + (ty - tY) * TILE - (camera.y - tY) * TILE;
         drawTile(tileId, Math.round(sx), Math.round(sy));
@@ -917,7 +962,7 @@ var ENGINE = (function() {
   }
 
   return {
-    init, getCanvas, getCtx, getFrame, tick,
+    init, loadTileset, getCanvas, getCtx, getFrame, tick,
     clear, darken, lighten,
     drawTile, drawMap, drawLegoBrick, drawStudPattern,
     drawMinifigure, drawFigureAt, drawWorldMarker,

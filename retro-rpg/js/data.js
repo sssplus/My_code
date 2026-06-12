@@ -35,7 +35,7 @@ var DATA = {
       culture: 'Devout theocracy', capital: 'Aurum Cathedral',
       color: '#DBA000', accentColor: '#FFFFFF',
       description: 'The faith guides all. Light and law are one in the sun-gilded plains.',
-      startPos: { x: 11, y: 12 }, mapZone: 'aurum'
+      startPos: { x: 8, y: 6 }, mapZone: 'aurum'
     },
     drakmoor: {
       id: 'drakmoor', name: 'Drakmoor', biome: 'Cold northern bogs',
@@ -49,7 +49,7 @@ var DATA = {
       culture: 'Merchant-kings, mercenaries', capital: 'Dune Throne',
       color: '#E4CD9E', accentColor: '#FE8A18',
       description: 'Gold buys armies here. The Dune Throne sits on ancient ruins worth dying for.',
-      startPos: { x: 17, y: 14 }, mapZone: 'dune_throne'
+      startPos: { x: 8, y: 6 }, mapZone: 'dune_throne'
     }
   },
 
@@ -304,7 +304,7 @@ var DATA = {
     13:['#DDEEFF','#C8DFFF']    // snow
   },
 
-  WALKABLE: new Set([1,2,3,5,8,9,10,12]),
+  WALKABLE: new Set([1,2,3,5,8,9,10,12,13]),
 
   // ── Environment Configuration ───────────────────────────────
   // Global defaults for the world; zones override via their `env` block:
@@ -381,19 +381,21 @@ var DATA = {
       // Row 17
       [0,0,0,0,0,0,4,4,4,4,4,4,4,4,4,4,4,4,4,4,0,0,0,0,0,0]
     ],
-    // Kingdom markers on world map (each sits on a walkable door tile)
+    // Procedural-overworld is infinite; entrances live at fixed world
+    // coords and TERRAIN guarantees a walkable clearing around each.
+    // Kingdoms are spread around the origin (valdris at 0,0 = world start).
     markers: [
-      { x:8,  y:6,  kingdom:'valdris',  name:'Ironhold',       zone:'ironhold' },
-      { x:10, y:5,  kingdom:'sylvara',  name:'Moonsong',       zone:'moonsong' },
-      { x:10, y:11, kingdom:'solheim',  name:'Aurum Cathedral',zone:'aurum' },
-      { x:3,  y:3,  kingdom:'drakmoor', name:'Ashenkeep',      zone:'ashenkeep' },
-      { x:21, y:13, kingdom:'veranthos',name:'Dune Throne',    zone:'dune_throne' }
+      { x:0,   y:0,   kingdom:'valdris',  name:'Ironhold',       zone:'ironhold' },
+      { x:38,  y:-18, kingdom:'sylvara',  name:'Moonsong',       zone:'moonsong' },
+      { x:18,  y:34,  kingdom:'solheim',  name:'Aurum Cathedral',zone:'aurum' },
+      { x:-34, y:-8,  kingdom:'drakmoor', name:'Ashenkeep',      zone:'ashenkeep' },
+      { x:46,  y:26,  kingdom:'veranthos',name:'Dune Throne',    zone:'dune_throne' }
     ],
-    // Dungeon entrances (each sits on a walkable tile)
+    // Dungeon entrances (also clearings in the procedural world).
     dungeons: [
-      { x:9, y:3, name:'Ashwood Ruins',      zone:'ashwood_dungeon' },
-      { x:3, y:6, name:'Bogmire Crypts',     zone:'bogmire_dungeon' },
-      { x:18,y:5, name:'Spice Road Tombs',   zone:'spice_dungeon'   }
+      { x:14,  y:-14, name:'Ashwood Ruins',    zone:'ashwood_dungeon' },
+      { x:-22, y:18,  name:'Bogmire Crypts',   zone:'bogmire_dungeon' },
+      { x:54,  y:8,   name:'Spice Road Tombs', zone:'spice_dungeon'   }
     ]
   },
 
@@ -422,7 +424,7 @@ var DATA = {
         { id:'merchant', name:'Bram the Merchant', x:11, y:7, color:'#9BA19D', dialog:'merchant_dialog', isShop:true },
         { id:'elder',    name:'Clan Elder Varos', x:7, y:2, color:'#DBA000', dialog:'elder_varos_dialog' }
       ],
-      exits: [{ x:6, y:10, targetZone:'world', targetX:8, targetY:6 }]
+      exits: [{ x:6, y:10, targetZone:'world', targetX:0, targetY:2 }]
     },
     moonsong: {
       name:'Moonsong', kingdom:'sylvara', width:16, height:12,
@@ -446,7 +448,7 @@ var DATA = {
         { id:'aelindra',  name:'Aelindra Moonveil', x:8, y:4, color:'#68BCC5', headColor:'#68BCC5', dialog:'aelindra_intro', isRomance:true },
         { id:'mage_tutor',name:'Master Silveth',     x:4, y:6, color:'#0055BF', dialog:'mage_tutor_dialog' }
       ],
-      exits: [{ x:6, y:10, targetZone:'world', targetX:10, targetY:5 }]
+      exits: [{ x:6, y:10, targetZone:'world', targetX:38, targetY:-16 }]
     },
     ashwood_dungeon: {
       name:'Ashwood Ruins — B1', kingdom:null, width:16, height:12,
@@ -472,7 +474,7 @@ var DATA = {
         { type:'void_knight',x:10, y:7,  patrol:false },
         { type:'iron_warlord',x:12,y:5,  isBoss:true }
       ],
-      exits: [{ x:2, y:10, targetZone:'world', targetX:9, targetY:3 }]
+      exits: [{ x:2, y:10, targetZone:'world', targetX:14, targetY:-12 }]
     },
     aurum: {
       name:'Aurum Cathedral', kingdom:'solheim', width:16, height:12,
@@ -496,7 +498,7 @@ var DATA = {
         { id:'high_cleric', name:'High Cleric Oren', x:7, y:2, color:'#F2CD37', headColor:'#E4CD9E', dialog:'priest_dialog' },
         { id:'calla',       name:'Calla Vane',       x:11, y:6, color:'#9BA19D', headColor:'#E4CD9E', dialog:'calla_intro', isRomance:true }
       ],
-      exits: [{ x:6, y:10, targetZone:'world', targetX:10, targetY:11 }]
+      exits: [{ x:6, y:10, targetZone:'world', targetX:18, targetY:36 }]
     },
     ashenkeep: {
       name:'Ashenkeep', kingdom:'drakmoor', width:16, height:12,
@@ -520,7 +522,7 @@ var DATA = {
         { id:'warden',      name:'Warden Maeve',  x:7, y:2, color:'#3D5C1A', dialog:'ashen_warden_dialog' },
         { id:'moor_guard',  name:'Moor Guard',    x:3, y:7, color:'#6C6E68', dialog:'ashen_guard_dialog' }
       ],
-      exits: [{ x:6, y:10, targetZone:'world', targetX:3, targetY:3 }]
+      exits: [{ x:6, y:10, targetZone:'world', targetX:-34, targetY:-6 }]
     },
     dune_throne: {
       name:'Dune Throne', kingdom:'veranthos', width:16, height:12,
@@ -545,7 +547,7 @@ var DATA = {
         { id:'avira',   name:'Princess Avira', x:8, y:4,  color:'#237841', dialog:'avira_intro', isRomance:true },
         { id:'zaff',    name:'Zaff the Trader',x:12, y:7, color:'#FE8A18', headColor:'#E4CD9E', dialog:'desert_merchant_dialog', isShop:true }
       ],
-      exits: [{ x:6, y:10, targetZone:'world', targetX:21, targetY:13 }]
+      exits: [{ x:6, y:10, targetZone:'world', targetX:46, targetY:28 }]
     },
     bogmire_dungeon: {
       name:'Bogmire Crypts — B1', kingdom:null, width:16, height:12,
@@ -571,7 +573,7 @@ var DATA = {
         { type:'crypt_shade',  x:10, y:7, patrol:true },
         { type:'bog_horror',   x:13, y:4, isBoss:true }
       ],
-      exits: [{ x:2, y:10, targetZone:'world', targetX:3, targetY:6 }]
+      exits: [{ x:2, y:10, targetZone:'world', targetX:-22, targetY:20 }]
     },
     spice_dungeon: {
       name:'Spice Road Tombs — B1', kingdom:null, width:16, height:12,
@@ -597,7 +599,7 @@ var DATA = {
         { type:'crypt_shade',   x:9,  y:8, patrol:true },
         { type:'tomb_sentinel', x:12, y:4, isBoss:true }
       ],
-      exits: [{ x:2, y:10, targetZone:'world', targetX:18, targetY:5 }]
+      exits: [{ x:2, y:10, targetZone:'world', targetX:54, targetY:10 }]
     }
   },
 

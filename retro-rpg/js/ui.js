@@ -75,13 +75,45 @@ var UI = (function() {
   function renderMinimap(ctx, zone, playerX, playerY, canvasW) {
     if (!zone) return;
     var mmX = canvasW - 90, mmY = 44, mmW = 80, mmH = 60;
-    var scX = mmW / zone.width, scY = mmH / zone.height;
 
     ctx.fillStyle = 'rgba(10,10,30,0.85)';
     ctx.fillRect(mmX, mmY, mmW, mmH);
     ctx.strokeStyle = '#F2CD37';
     ctx.lineWidth = 1;
     ctx.strokeRect(mmX, mmY, mmW, mmH);
+
+    // Procedural (infinite) world: sample a window centered on the player.
+    if (zone.procedural) {
+      var cols = 40, rows = 30;
+      var cw = mmW / cols, ch = mmH / rows;
+      var sx0 = Math.floor(playerX - cols/2), sy0 = Math.floor(playerY - rows/2);
+      for (var ry = 0; ry < rows; ry++) {
+        for (var rx = 0; rx < cols; rx++) {
+          var tid = zone.getTile(sx0 + rx, sy0 + ry);
+          ctx.fillStyle = (DATA.TILE_COLORS[tid] || ['#333'])[0];
+          ctx.fillRect(mmX + rx*cw, mmY + ry*ch, Math.max(1, cw), Math.max(1, ch));
+        }
+      }
+      // Entrance pips
+      var pips = [];
+      DATA.WORLD_MAP.markers.forEach(function(m){ pips.push({x:m.x, y:m.y, c:(DATA.KINGDOMS[m.kingdom]||{}).color || '#FFF'}); });
+      DATA.WORLD_MAP.dungeons.forEach(function(d){ pips.push({x:d.x, y:d.y, c:'#81007B'}); });
+      pips.forEach(function(e){
+        var rx = e.x - sx0, ry = e.y - sy0;
+        if (rx >= 0 && rx < cols && ry >= 0 && ry < rows) {
+          ctx.fillStyle = e.c;
+          ctx.fillRect(mmX + rx*cw - 1, mmY + ry*ch - 1, 3, 3);
+        }
+      });
+      ctx.fillStyle = '#F2CD37';
+      ctx.beginPath();
+      ctx.arc(mmX + (cols/2)*cw, mmY + (rows/2)*ch, 2, 0, Math.PI*2);
+      ctx.fill();
+      ENGINE.drawText('MAP', mmX+2, mmY+8, {size:6, color:'#F2CD37'});
+      return;
+    }
+
+    var scX = mmW / zone.width, scY = mmH / zone.height;
 
     // Tiles
     for (var ty = 0; ty < zone.height; ty++) {
