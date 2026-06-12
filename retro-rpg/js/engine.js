@@ -7,10 +7,106 @@ var ENGINE = (function() {
   var canvas, ctx;
   var TILE = 32;
   var camera = { x:0, y:0 };
-  var keys = {};
+  var keysHeld    = {};   // code → true while physically held
+  var keysPressed = {};   // code → true only for the frame it was pressed
   var mousePos = { x:0, y:0 };
   var mouseClicked = false;
   var frameCount = 0;
+  var captureCallback = null;  // set while waiting for a rebind keypress
+
+  // Keys whose browser default (scrolling etc.) must be suppressed
+  var PREVENT_DEFAULT = new Set([
+    'ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','Tab'
+  ]);
+
+  // ── Action → key bindings ──────────────────────────────────
+  // Each action has up to 2 key slots. Rebindable, saved to localStorage.
+  var DEFAULT_BINDINGS = {
+    up:       ['ArrowUp',    'KeyW'],
+    down:     ['ArrowDown',  'KeyS'],
+    left:     ['ArrowLeft',  'KeyA'],
+    right:    ['ArrowRight', 'KeyD'],
+    confirm:  ['Enter',      'Space'],
+    cancel:   ['Escape',     'KeyX'],
+    interact: ['KeyE',       null],
+    menu:     ['KeyM',       null],
+    save:     ['KeyP',       null],
+    attack:   ['KeyA',       null],
+    skills:   ['KeyS',       null],
+    item:     ['KeyI',       null],
+    defend:   ['KeyD',       null],
+    flee:     ['KeyF',       null]
+  };
+
+  var ACTION_LABELS = {
+    up:'Move Up', down:'Move Down', left:'Move Left', right:'Move Right',
+    confirm:'Confirm / Advance', cancel:'Cancel / Back', interact:'Interact / Talk',
+    menu:'Open Menu', save:'Quick Save',
+    attack:'Combat: Attack', skills:'Combat: Skills', item:'Combat: Items',
+    defend:'Combat: Defend', flee:'Combat: Flee'
+  };
+
+  var bindings = loadBindings();
+
+  function loadBindings() {
+    try {
+      var raw = localStorage.getItem('cosr_keybinds');
+      if (raw) {
+        var saved = JSON.parse(raw);
+        // Merge with defaults so new actions get their default keys
+        var merged = {};
+        Object.keys(DEFAULT_BINDINGS).forEach(function(a) {
+          merged[a] = (saved[a] && saved[a].length) ? saved[a].slice(0,2) : DEFAULT_BINDINGS[a].slice();
+        });
+        return merged;
+      }
+    } catch(e) {}
+    return JSON.parse(JSON.stringify(DEFAULT_BINDINGS));
+  }
+
+  function saveBindings() {
+    try { localStorage.setItem('cosr_keybinds', JSON.stringify(bindings)); } catch(e) {}
+  }
+
+  function getBindings()     { return bindings; }
+  function getActionLabels() { return ACTION_LABELS; }
+
+  function resetBindings() {
+    bindings = JSON.parse(JSON.stringify(DEFAULT_BINDINGS));
+    saveBindings();
+  }
+
+  // Begin listening for the next keypress; assigns it to action/slot
+  function rebindKey(actionName, slot, cb) {
+    captureCallback = function(code) {
+      if (code === 'Escape') { if (cb) cb(null); return; }  // ESC aborts rebind
+      // Remove this key from any other action slot to avoid double-binding
+      Object.keys(bindings).forEach(function(a) {
+        bindings[a] = bindings[a].map(function(k) { return k === code ? null : k; });
+      });
+      bindings[actionName][slot] = code;
+      saveBindings();
+      if (cb) cb(code);
+    };
+  }
+
+  function isCapturing() { return !!captureCallback; }
+
+  // Human-readable key name for UI display
+  function keyLabel(code) {
+    if (!code) return '—';
+    var special = {
+      'ArrowUp':'↑', 'ArrowDown':'↓', 'ArrowLeft':'←', 'ArrowRight':'→',
+      'Space':'SPACE', 'Enter':'ENTER', 'Escape':'ESC', 'Backspace':'BKSP',
+      'Tab':'TAB', 'ShiftLeft':'L-SHIFT', 'ShiftRight':'R-SHIFT',
+      'ControlLeft':'L-CTRL', 'ControlRight':'R-CTRL', 'AltLeft':'L-ALT', 'AltRight':'R-ALT'
+    };
+    if (special[code]) return special[code];
+    if (code.startsWith('Key'))   return code.slice(3);
+    if (code.startsWith('Digit')) return code.slice(5);
+    if (code.startsWith('Numpad'))return 'NUM-' + code.slice(6);
+    return code.toUpperCase();
+  }
 
   // ── Color helpers ──────────────────────────────────────────
   function hexToRgb(hex) {
@@ -46,12 +142,25 @@ var ENGINE = (function() {
   // ── Input ──────────────────────────────────────────────────
   function setupInput() {
     document.addEventListener('keydown', function(e) {
-      keys[e.code] = true;
-      keys[e.key]  = true;
+      // Rebind capture mode swallows the next keypress
+      if (captureCallback) {
+        e.preventDefault();
+        var cb = captureCallback;
+        captureCallback = null;
+        cb(e.code);
+        return;
+      }
+      if (!e.repeat) keysPressed[e.code] = true;  // ignore OS auto-repeat
+      keysHeld[e.code] = true;
+      if (PREVENT_DEFAULT.has(e.code)) e.preventDefault();
     });
     document.addEventListener('keyup', function(e) {
-      keys[e.code] = false;
-      keys[e.key]  = false;
+      keysHeld[e.code] = false;
+    });
+    // Releasing focus shouldn't leave keys stuck down
+    window.addEventListener('blur', function() {
+      keysHeld = {};
+      keysPressed = {};
     });
     canvas.addEventListener('mousemove', function(e) {
       var r = canvas.getBoundingClientRect();
@@ -66,11 +175,40 @@ var ENGINE = (function() {
     });
   }
 
-  function isKeyDown(k)   { return !!keys[k]; }
-  function isKeyJust(k)   { var v = !!keys[k]; if(v) keys[k]=false; return v; }
+  function isKeyDown(k) { return !!keysHeld[k]; }
+  // Consuming "pressed this frame" check — a press triggers exactly one handler
+  function isKeyJust(k) {
+    if (keysPressed[k]) { keysPressed[k] = false; return true; }
+    return false;
+  }
   function getMousePos()  { return {x:mousePos.x, y:mousePos.y}; }
   function wasClicked()   { var v=mouseClicked; mouseClicked=false; return v; }
-  function clearKeys()    { keys = {}; }
+  function clearKeys()    { keysHeld = {}; keysPressed = {}; }
+
+  // Called at the end of every frame: pressed-state lasts one frame only
+  function endFrame() {
+    keysPressed  = {};
+    mouseClicked = false;
+  }
+
+  // ── Action-based input (uses the binding map) ─────────────
+  function action(name) {  // just pressed this frame
+    var binds = bindings[name];
+    if (!binds) return false;
+    for (var i = 0; i < binds.length; i++) {
+      if (binds[i] && isKeyJust(binds[i])) return true;
+    }
+    return false;
+  }
+
+  function actionHeld(name) {  // currently held
+    var binds = bindings[name];
+    if (!binds) return false;
+    for (var i = 0; i < binds.length; i++) {
+      if (binds[i] && isKeyDown(binds[i])) return true;
+    }
+    return false;
+  }
 
   // ── Camera ─────────────────────────────────────────────────
   function setCamera(x, y, mapW, mapH, viewW, viewH) {
@@ -788,7 +926,9 @@ var ENGINE = (function() {
     addFloatText, screenFlash,
     isButtonHovered, isButtonClicked,
     setCamera, getCamera,
-    isKeyDown, isKeyJust, getMousePos, wasClicked, clearKeys,
+    isKeyDown, isKeyJust, getMousePos, wasClicked, clearKeys, endFrame,
+    action, actionHeld,
+    getBindings, getActionLabels, rebindKey, resetBindings, isCapturing, keyLabel,
     TILE
   };
 })();

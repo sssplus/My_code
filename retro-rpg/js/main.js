@@ -50,14 +50,10 @@ var GAME = (function() {
     canvas.height = H;
     ctx    = ENGINE.init(canvas);
 
-    // Keyboard for chargen name entry
+    // Keyboard for chargen name entry (printable chars only; ENGINE handles the rest)
     document.addEventListener('keydown', function(e) {
-      if (currentState === STATE.CHARGEN) {
+      if (currentState === STATE.CHARGEN && !e.ctrlKey && !e.altKey && !e.metaKey) {
         if (e.key.length === 1) CHARGEN.charInput(e.key);
-      }
-      // Save shortcut
-      if (e.code === 'KeyP' && currentState === STATE.WORLD) {
-        if (PLAYER.save()) UI.showNotification('Game saved!', '#77C537');
       }
     });
 
@@ -152,6 +148,7 @@ var GAME = (function() {
     update(dt);
     render(ctx);
 
+    ENGINE.endFrame();  // clear per-frame pressed state after all handlers ran
     requestAnimationFrame(mainLoop);
   }
 
@@ -172,42 +169,59 @@ var GAME = (function() {
     }
   }
 
+  // Title screen: keyboard cursor selection (↑↓ cycle items, Enter/confirm selects)
+  var titleSel = 0;
+  var TITLE_ITEMS = ['new', 'continue', 'howto'];
+
   function updateTitle() {
     var cW = W, cH = H;
-    // New game
-    if (ENGINE.isKeyJust('KeyN') || ENGINE.isButtonClicked(cW/2-110, 386, 220, 32)) {
-      transition(STATE.CHARGEN);
-      return;
+    var itemY = [386, 424, 462];
+
+    // Keyboard nav
+    if (ENGINE.action('up'))   titleSel = (titleSel - 1 + TITLE_ITEMS.length) % TITLE_ITEMS.length;
+    if (ENGINE.action('down')) titleSel = (titleSel + 1) % TITLE_ITEMS.length;
+
+    // Mouse hover updates selection
+    TITLE_ITEMS.forEach(function(id, i) {
+      if (ENGINE.isButtonHovered(cW/2-110, itemY[i], 220, 32)) titleSel = i;
+    });
+
+    var confirmed = ENGINE.action('confirm') || ENGINE.isButtonClicked(cW/2-110, itemY[titleSel], 220, 36);
+
+    if (confirmed) {
+      if (titleSel === 0) { transition(STATE.CHARGEN); return; }
+      if (titleSel === 1 && PLAYER.hasSave()) {
+        if (PLAYER.load()) {
+          var p = PLAYER.get();
+          WORLD.loadZone(p.zone || 'world', p.x, p.y);
+          transition(STATE.WORLD);
+        }
+        return;
+      }
+      if (titleSel === 2) { transition(STATE.HOW_TO); return; }
     }
-    // Continue
-    if ((ENGINE.isKeyJust('KeyC') || ENGINE.isButtonClicked(cW/2-110, 424, 220, 32)) && PLAYER.hasSave()) {
+
+    // Direct mouse clicks on buttons still work too
+    if (ENGINE.isButtonClicked(cW/2-110, 386, 220, 32)) { transition(STATE.CHARGEN); return; }
+    if (ENGINE.isButtonClicked(cW/2-110, 424, 220, 32) && PLAYER.hasSave()) {
       if (PLAYER.load()) {
-        var p = PLAYER.get();
-        WORLD.loadZone(p.zone || 'world', p.x, p.y);
+        WORLD.loadZone(PLAYER.get().zone || 'world', PLAYER.get().x, PLAYER.get().y);
         transition(STATE.WORLD);
       }
       return;
     }
-    // How to play
-    if (ENGINE.isButtonClicked(cW/2-110, 462, 220, 24)) {
-      transition(STATE.HOW_TO);
-      return;
-    }
-    // Keyboard shortcuts
-    if (ENGINE.isKeyJust('Enter') || ENGINE.isKeyJust('Space')) {
-      transition(STATE.CHARGEN);
-    }
+    if (ENGINE.isButtonClicked(cW/2-110, 462, 220, 24)) { transition(STATE.HOW_TO); return; }
   }
 
   function updateHowTo() {
-    if (ENGINE.isKeyJust('Escape') || ENGINE.isKeyJust('Space') || ENGINE.isKeyJust('Enter') ||
+    if (ENGINE.action('cancel') || ENGINE.action('confirm') ||
         ENGINE.isButtonClicked(W/2-80, H-90, 160, 28)) {
       transition(STATE.TITLE);
     }
   }
 
   function updatePrologue() {
-    if (ENGINE.isKeyJust('Space') || ENGINE.isKeyJust('Enter') || ENGINE.wasClicked()) {
+    if (ENGINE.action('confirm') || ENGINE.wasClicked()) {
       if (prologueDone) {
         var p = PLAYER.get();
         var king = DATA.KINGDOMS[p.kingdom];
@@ -219,29 +233,33 @@ var GAME = (function() {
   }
 
   function updateWorld(dt) {
-    // Menu
-    if (ENGINE.isKeyJust('KeyM') || ENGINE.isKeyJust('Escape')) {
+    // Save shortcut
+    if (ENGINE.action('save')) {
+      if (PLAYER.save()) UI.showNotification('Game saved!', '#77C537');
+    }
+
+    // Toggle menu
+    if (ENGINE.action('menu') || (ENGINE.action('cancel') && !UI.isMenuOpen())) {
       if (UI.isMenuOpen()) UI.closeMenu();
-      else { UI.openMenu(); }
+      else UI.openMenu();
       return;
     }
 
-    // Menu / shop / event intercept
+    // Pass input to open overlays first
     if (UI.isMenuOpen())          { UI.handleMenuInput(); return; }
     if (UI.isShopOpen())          { UI.handleShopInput(); return; }
     if (UI.isPoliticalEventOpen()){ UI.handleEventInput(); return; }
 
     // Interact
-    if (ENGINE.isKeyJust('Enter') || ENGINE.isKeyJust('KeyE') || ENGINE.isKeyJust('Space')) {
+    if (ENGINE.action('interact') || ENGINE.action('confirm')) {
       WORLD.interactFacing();
     }
 
-    // Movement
-    var moved = false;
-    if (ENGINE.isKeyDown('ArrowLeft')  || ENGINE.isKeyDown('KeyA')) { WORLD.movePlayer(-1, 0); moved=true; }
-    if (ENGINE.isKeyDown('ArrowRight') || ENGINE.isKeyDown('KeyD')) { WORLD.movePlayer( 1, 0); moved=true; }
-    if (ENGINE.isKeyDown('ArrowUp')    || ENGINE.isKeyDown('KeyW')) { WORLD.movePlayer( 0,-1); moved=true; }
-    if (ENGINE.isKeyDown('ArrowDown')  || ENGINE.isKeyDown('KeyS')) { WORLD.movePlayer( 0, 1); moved=true; }
+    // Movement (held — smooth scrolling)
+    if (ENGINE.actionHeld('left'))  WORLD.movePlayer(-1,  0);
+    if (ENGINE.actionHeld('right')) WORLD.movePlayer( 1,  0);
+    if (ENGINE.actionHeld('up'))    WORLD.movePlayer( 0, -1);
+    if (ENGINE.actionHeld('down'))  WORLD.movePlayer( 0,  1);
 
     // World click navigation
     if (ENGINE.wasClicked()) {
@@ -318,16 +336,16 @@ var GAME = (function() {
       }
     }
 
-    // After end, any key to leave
+    // After end, confirm/cancel to leave combat results screen
     if ((cs.victory || cs.defeat || cs.fleeSuccess) && cs.phase === 'end') {
-      if (ENGINE.isKeyJust('Space') || ENGINE.isKeyJust('Enter') || ENGINE.isKeyJust('Escape')) {
+      if (ENGINE.action('confirm') || ENGINE.action('cancel')) {
         ENGINE.clearKeys();
       }
     }
   }
 
   function updateGameOver() {
-    if (ENGINE.isKeyJust('Enter') || ENGINE.isKeyJust('Space') || ENGINE.isKeyJust('Escape')) {
+    if (ENGINE.action('confirm') || ENGINE.action('cancel')) {
       transition(STATE.TITLE);
     }
   }
@@ -338,7 +356,7 @@ var GAME = (function() {
 
     switch (currentState) {
       case STATE.TITLE:
-        UI.renderTitleScreen(ctx, W, H, frame);
+        UI.renderTitleScreen(ctx, W, H, frame, titleSel);
         break;
 
       case STATE.HOW_TO:

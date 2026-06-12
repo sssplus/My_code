@@ -853,13 +853,14 @@ var COMBAT = (function() {
     if (state.animTimer > 0) state.animTimer--;
   }
 
+  // action IDs must match the binding map in engine.js
   var ACTIONS = [
-    { id:'attack',  label:'ATTACK',  key:'A', color:'#C91A09' },
-    { id:'skills',  label:'SKILLS',  key:'S', color:'#0055BF' },
-    { id:'magic',   label:'MAGIC',   key:'M', color:'#81007B' },
-    { id:'item',    label:'ITEM',    key:'I', color:'#237841' },
-    { id:'defend',  label:'DEFEND',  key:'D', color:'#9BA19D' },
-    { id:'flee',    label:'FLEE',    key:'F', color:'#6C6E68' }
+    { id:'attack',  label:'ATTACK',  bindId:'attack',  color:'#C91A09' },
+    { id:'skills',  label:'SKILLS',  bindId:'skills',  color:'#0055BF' },
+    { id:'magic',   label:'MAGIC',   bindId:'skills',  color:'#81007B' },
+    { id:'item',    label:'ITEM',    bindId:'item',    color:'#237841' },
+    { id:'defend',  label:'DEFEND',  bindId:'defend',  color:'#9BA19D' },
+    { id:'flee',    label:'FLEE',    bindId:'flee',    color:'#6C6E68' }
   ];
 
   function renderActionMenu(ctx, canvasW, canvasH) {
@@ -870,21 +871,26 @@ var COMBAT = (function() {
       var col = Math.floor(i/3), row = i%3;
       var bx = mx + col*104, by = my + row*34;
       var hovered = ENGINE.isButtonHovered(bx, by, 100, 28);
-      ENGINE.drawButton(bx, by, 100, 28, '['+a.key+'] '+a.label, hovered, { color:a.color, fontSize:8 });
+      // Show the actual bound key from the binding map
+      var binds = ENGINE.getBindings();
+      var keyCode = (binds[a.bindId] || [])[0] || null;
+      var keyLabel = keyCode ? ENGINE.keyLabel(keyCode) : '?';
+      ENGINE.drawButton(bx, by, 100, 28, '['+keyLabel+'] '+a.label, hovered, { color:a.color, fontSize:8 });
     });
   }
 
   function renderSkillMenu(ctx, canvasW, canvasH) {
     var skills = state.player.skills || [];
     var mx = canvasW - 320, my = canvasH - 240, mw = 300, mh = 220;
-    ENGINE.drawPanel(mx-4, my-8, mw+8, mh+16, { title:'SKILLS' });
+    ENGINE.drawPanel(mx-4, my-8, mw+8, mh+16, { title:'SKILLS  [↑↓] nav  [CONFIRM] use' });
 
     skills.forEach(function(skillId, i) {
       var sk = DATA.SKILLS[skillId];
       if (!sk) return;
       var by = my + i * 28;
       if (by > my + mh - 30) return;
-      var hovered = ENGINE.isButtonHovered(mx, by, mw, 24);
+      var kbSel   = (i === (state.skillSel||0));
+      var hovered = kbSel || ENGINE.isButtonHovered(mx, by, mw, 24);
       var affordable = (sk.costType==='sp' && state.player.sp>=sk.cost) ||
                        (sk.costType==='mp' && state.player.mp>=sk.cost) ||
                        !sk.costType;
@@ -951,8 +957,8 @@ var COMBAT = (function() {
   function handleInput() {
     if (!state || state.phase !== 'player_menu') return;
 
-    // Back from submenus
-    if (ENGINE.isKeyJust('Escape') || ENGINE.isKeyJust('KeyX')) {
+    // Back from submenus — cancel or any unbound "back" key
+    if (ENGINE.action('cancel')) {
       state.showingSkills = false;
       state.showingItems  = false;
       return;
@@ -967,13 +973,12 @@ var COMBAT = (function() {
       return;
     }
 
-    // Action hotkeys
-    if (ENGINE.isKeyJust('KeyA')) { playerAttack(); return; }
-    if (ENGINE.isKeyJust('KeyS')) { state.showingSkills = true; return; }
-    if (ENGINE.isKeyJust('KeyM')) { state.showingSkills = true; return; }
-    if (ENGINE.isKeyJust('KeyI')) { state.showingItems = true; return; }
-    if (ENGINE.isKeyJust('KeyD')) { playerDefend(); return; }
-    if (ENGINE.isKeyJust('KeyF')) { playerFlee(); return; }
+    // Action hotkeys — use ENGINE.action() so rebinding works
+    if (ENGINE.action('attack'))  { playerAttack(); return; }
+    if (ENGINE.action('skills'))  { state.showingSkills = true; return; }
+    if (ENGINE.action('item'))    { state.showingItems  = true; return; }
+    if (ENGINE.action('defend'))  { playerDefend(); return; }
+    if (ENGINE.action('flee'))    { playerFlee(); return; }
 
     // Mouse clicks on action buttons
     ACTIONS.forEach(function(a, i) {
@@ -996,14 +1001,23 @@ var COMBAT = (function() {
     var canvasH = ENGINE.getCanvas().height;
     var mx = canvasW - 320, my = canvasH - 240, mw = 300;
 
+    // Keyboard nav: ↑/↓ through skills, confirm to use
+    if (ENGINE.action('up'))   state.skillSel = ((state.skillSel||0) - 1 + skills.length) % skills.length;
+    if (ENGINE.action('down')) state.skillSel = ((state.skillSel||0) + 1) % skills.length;
+    if (ENGINE.action('confirm') && skills.length > 0) {
+      state.showingSkills = false;
+      playerSkill(skills[state.skillSel||0]);
+      return;
+    }
+
     skills.forEach(function(skillId, i) {
       var by = my + i * 28;
+      if (ENGINE.isButtonHovered(mx, by, mw, 24)) state.skillSel = i;
       if (ENGINE.isButtonClicked(mx, by, mw, 24)) {
         state.showingSkills = false;
         playerSkill(skillId);
       }
     });
-    // Back
     if (ENGINE.isButtonClicked(mx, my + 160, 80, 20)) {
       state.showingSkills = false;
     }
@@ -1015,8 +1029,17 @@ var COMBAT = (function() {
     var canvasH = ENGINE.getCanvas().height;
     var mx = canvasW - 280, my = canvasH - 200, mw = 260;
 
+    if (ENGINE.action('up'))   state.itemSel = ((state.itemSel||0) - 1 + Math.max(1,inventory.length)) % Math.max(1,inventory.length);
+    if (ENGINE.action('down')) state.itemSel = ((state.itemSel||0) + 1) % Math.max(1,inventory.length);
+    if (ENGINE.action('confirm') && inventory.length > 0) {
+      state.showingItems = false;
+      playerItem(inventory[state.itemSel||0].id);
+      return;
+    }
+
     inventory.forEach(function(slot, i) {
       var by = my + i * 28;
+      if (ENGINE.isButtonHovered(mx, by, mw, 24)) state.itemSel = i;
       if (ENGINE.isButtonClicked(mx, by, mw, 24)) {
         state.showingItems = false;
         playerItem(slot.id);

@@ -55,8 +55,12 @@ var UI = (function() {
     // Zone name
     ENGINE.drawText(zoneName || 'World Map', canvasW-160, 18, {size:8, color:'#9BA19D'});
 
-    // Controls hint
-    ENGINE.drawText('[M] Menu  [E] Talk  [ENTER] Action', canvasW/2, 28, {size:7, color:'#6C6E68', align:'center'});
+    // Controls hint — shows actual bound keys
+    var b = ENGINE.getBindings();
+    function k(a){ return ENGINE.keyLabel((b[a]||[])[0]); }
+    ENGINE.drawText(
+      '['+k('menu')+'] Menu  ['+k('interact')+'] Talk  ['+k('confirm')+'] Action  ['+k('save')+'] Save',
+      canvasW/2, 28, {size:7, color:'#6C6E68', align:'center'});
 
     // Origin badge
     var orig = DATA.ORIGINS[p.origin];
@@ -104,7 +108,8 @@ var UI = (function() {
   }
 
   // ── Pause/Game Menu ────────────────────────────────────────
-  var MENU_TABS = ['Status','Quests','Inventory','Politics','Bonds'];
+  var MENU_TABS = ['Status','Quests','Inventory','Politics','Bonds','Controls'];
+  var TAB_W = 126;
 
   function openMenu() {
     menuState = {
@@ -121,16 +126,24 @@ var UI = (function() {
   function handleMenuInput() {
     if (!menuState) return;
 
-    if (ENGINE.isKeyJust('Escape') || ENGINE.isKeyJust('KeyM')) { closeMenu(); return; }
+    // While waiting for a rebind keypress, don't process menu keys
+    if (ENGINE.isCapturing()) return;
+
+    if (ENGINE.action('cancel') || ENGINE.action('menu')) { closeMenu(); return; }
 
     // Tab switching
-    if (ENGINE.isKeyJust('ArrowLeft')  || ENGINE.isKeyJust('KeyQ')) menuState.tab = (menuState.tab - 1 + MENU_TABS.length) % MENU_TABS.length;
-    if (ENGINE.isKeyJust('ArrowRight') || ENGINE.isKeyJust('KeyE')) menuState.tab = (menuState.tab + 1) % MENU_TABS.length;
+    if (ENGINE.action('left'))  menuState.tab = (menuState.tab - 1 + MENU_TABS.length) % MENU_TABS.length;
+    if (ENGINE.action('right')) menuState.tab = (menuState.tab + 1) % MENU_TABS.length;
 
     // Mouse tab clicks
     MENU_TABS.forEach(function(tab, i) {
-      if (ENGINE.isButtonClicked(20 + i*150, 50, 142, 28)) menuState.tab = i;
+      if (ENGINE.isButtonClicked(20 + i*(TAB_W+8), 50, TAB_W, 28)) menuState.tab = i;
     });
+
+    // Controls tab: rebind clicks
+    if (menuState.tab === 5) {
+      handleControlsClicks(20, 90, ENGINE.getCanvas().width - 40);
+    }
   }
 
   function renderMenu(ctx, canvasW, canvasH) {
@@ -143,10 +156,11 @@ var UI = (function() {
     // Main panel
     ENGINE.drawPanel(10, 40, canvasW-20, canvasH-60, { title:'CHRONICLES MENU', border:'#F2CD37' });
 
-    // Tabs
+    // Tabs — evenly spaced using TAB_W
     MENU_TABS.forEach(function(tab, i) {
       var active = (i === menuState.tab);
-      ENGINE.drawButton(20 + i*150, 50, 142, 28, tab, active, { color: active ? '#F2CD37' : '#0055BF', fontSize:9 });
+      ENGINE.drawButton(20 + i*(TAB_W+4), 50, TAB_W, 28, tab, active,
+        { color: active ? '#F2CD37' : '#0055BF', fontSize:7 });
     });
 
     // Tab content
@@ -157,9 +171,121 @@ var UI = (function() {
       case 2: SYSTEMS.renderInventoryPanel(ctx, contentX, contentY, contentW, contentH); break;
       case 3: SYSTEMS.renderPoliticalPanel(ctx, contentX, contentY, contentW, contentH); break;
       case 4: SYSTEMS.renderRomancePanel(ctx, contentX, contentY, contentW, contentH); break;
+      case 5: renderControlsTab(ctx, contentX, contentY, contentW, contentH); break;
     }
 
-    ENGINE.drawText('[← →] Switch tabs  [M / ESC] Close', canvasW/2, canvasH-22, {size:8, color:'#6C6E68', align:'center'});
+    ENGINE.drawText('[Q / ←]  prev tab    [E / →]  next tab    [M / ESC]  close',
+      canvasW/2, canvasH-22, {size:7, color:'#6C6E68', align:'center'});
+  }
+
+  // ── Controls tab ───────────────────────────────────────────
+  // State for which slot is currently being captured
+  var rebindTarget = null;  // { action, slot } | null
+
+  function handleControlsClicks(x, y, w) {
+    var binds  = ENGINE.getBindings();
+    var labels = ENGINE.getActionLabels();
+    var actions = Object.keys(labels);
+    var rowH = 36;
+
+    actions.forEach(function(actionName, i) {
+      var ry = y + i * rowH;
+      // Slot 0 button
+      if (ENGINE.isButtonClicked(x + w - 240, ry + 4, 110, 24)) {
+        rebindTarget = { action: actionName, slot: 0 };
+        ENGINE.rebindKey(actionName, 0, function(code) {
+          rebindTarget = null;
+          if (code) UI.showNotification('Rebound: ' + ENGINE.keyLabel(code), '#77C537');
+        });
+      }
+      // Slot 1 button
+      if (ENGINE.isButtonClicked(x + w - 124, ry + 4, 110, 24)) {
+        rebindTarget = { action: actionName, slot: 1 };
+        ENGINE.rebindKey(actionName, 1, function(code) {
+          rebindTarget = null;
+          if (code) UI.showNotification('Rebound: ' + ENGINE.keyLabel(code), '#77C537');
+        });
+      }
+    });
+
+    // Reset all button
+    var resetY = y + actions.length * rowH + 8;
+    if (ENGINE.isButtonClicked(x, resetY, 180, 26)) {
+      ENGINE.resetBindings();
+      UI.showNotification('Controls reset to defaults!', '#F2CD37');
+    }
+  }
+
+  function renderControlsTab(ctx, x, y, w, h) {
+    var binds   = ENGINE.getBindings();
+    var labels  = ENGINE.getActionLabels();
+    var actions = Object.keys(labels);
+    var rowH    = 36;
+
+    // Section dividers
+    var sections = { up:'MOVEMENT', attack:'COMBAT', confirm:'GENERAL' };
+
+    // Header row
+    ENGINE.drawLegoBrick(x, y - 8, w, 18, '#0055BF', ENGINE.darken('#0055BF', 30), {plate:true});
+    ENGINE.drawText('ACTION', x+4, y+4, {size:7, color:'#FFF', bold:true});
+    ENGINE.drawText('PRIMARY KEY', x+w-238, y+4, {size:7, color:'#FFF', bold:true});
+    ENGINE.drawText('SECONDARY KEY', x+w-122, y+4, {size:7, color:'#FFF', bold:true});
+
+    actions.forEach(function(actionName, i) {
+      var ry  = y + i * rowH;
+      var keys = binds[actionName] || [null, null];
+
+      // Section heading
+      if (sections[actionName]) {
+        ENGINE.drawText('── ' + sections[actionName] + ' ──', x, ry + 2, {size:6, color:'#F2CD37'});
+        ry += 12;
+      }
+
+      var isCapturing0 = rebindTarget && rebindTarget.action === actionName && rebindTarget.slot === 0;
+      var isCapturing1 = rebindTarget && rebindTarget.action === actionName && rebindTarget.slot === 1;
+      var hov0 = ENGINE.isButtonHovered(x+w-240, ry+4, 110, 24);
+      var hov1 = ENGINE.isButtonHovered(x+w-124, ry+4, 110, 24);
+
+      // Row background (alternate)
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.1)';
+      ctx.fillRect(x, ry, w, rowH - 2);
+
+      // Action label
+      ENGINE.drawText(labels[actionName], x+4, ry + 16, {size:7, color:'#9BA19D'});
+
+      // Primary key button
+      var k0label = isCapturing0 ? '< PRESS KEY >' : ENGINE.keyLabel(keys[0]);
+      ENGINE.drawButton(x+w-240, ry+4, 110, 24, k0label,
+        isCapturing0 || hov0,
+        { color: isCapturing0 ? '#DBA000' : (hov0 ? '#237841' : '#1B2A34'), fontSize: 8 });
+
+      // Secondary key button
+      var k1label = isCapturing1 ? '< PRESS KEY >' : ENGINE.keyLabel(keys[1]);
+      ENGINE.drawButton(x+w-124, ry+4, 110, 24, k1label,
+        isCapturing1 || hov1,
+        { color: isCapturing1 ? '#DBA000' : (hov1 ? '#237841' : '#1B2A34'), fontSize: 8 });
+    });
+
+    // Reset button
+    var resetY = y + actions.length * rowH + 8;
+    ENGINE.drawButton(x, resetY, 180, 26, 'RESET TO DEFAULTS',
+      ENGINE.isButtonHovered(x, resetY, 180, 26),
+      { color: '#C91A09', fontSize: 7 });
+
+    // Capture hint
+    if (rebindTarget) {
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(0, 0, ENGINE.getCanvas().width, ENGINE.getCanvas().height);
+      ENGINE.drawPanel(ENGINE.getCanvas().width/2-180, ENGINE.getCanvas().height/2-40, 360, 80,
+        {bg:'rgba(10,10,30,0.97)', border:'#DBA000', title:'REBIND KEY'});
+      ENGINE.drawText('Press any key to bind...', ENGINE.getCanvas().width/2,
+        ENGINE.getCanvas().height/2+4, {size:9, color:'#F2CD37', align:'center'});
+      ENGINE.drawText('(ESC to cancel)', ENGINE.getCanvas().width/2,
+        ENGINE.getCanvas().height/2+22, {size:7, color:'#9BA19D', align:'center'});
+    }
+
+    ENGINE.drawText('Click a key button to rebind it  •  ESC cancels capture',
+      x+w/2, resetY+36, {size:7, color:'#6C6E68', align:'center'});
   }
 
   function renderStatusTab(ctx, x, y, w, h) {
@@ -229,7 +355,7 @@ var UI = (function() {
 
   function handleShopInput() {
     if (!shopState) return;
-    if (ENGINE.isKeyJust('Escape')) { closeShop(); return; }
+    if (ENGINE.action('cancel')) { closeShop(); return; }
 
     var canvasW = ENGINE.getCanvas().width;
     var canvasH = ENGINE.getCanvas().height;
@@ -315,7 +441,7 @@ var UI = (function() {
       if (ENGINE.isButtonHovered(canvasW/2-220, by, 440, 36)) eventState.selIdx = i;
     });
 
-    if (ENGINE.isKeyJust('Escape')) {
+    if (ENGINE.action('cancel')) {
       eventState = null;
     }
   }
@@ -361,7 +487,8 @@ var UI = (function() {
   }
 
   // ── Title Screen ───────────────────────────────────────────
-  function renderTitleScreen(ctx, canvasW, canvasH, frame) {
+  function renderTitleScreen(ctx, canvasW, canvasH, frame, titleSel) {
+    titleSel = titleSel || 0;
     // Animated Lego background
     ENGINE.drawStudPattern(0, 0, canvasW, canvasH, '#0A0A14', 32);
 
@@ -423,9 +550,20 @@ var UI = (function() {
     // Menu options
     var blink = Math.floor(frame/20) % 2;
     ENGINE.drawPanel(canvasW/2-130, 370, 260, 140, {border:'#F2CD37'});
-    ENGINE.drawButton(canvasW/2-110, 386, 220, 32, '[ NEW GAME ]',      ENGINE.isButtonHovered(canvasW/2-110,386,220,32), {color:'#237841', fontSize:10});
-    ENGINE.drawButton(canvasW/2-110, 424, 220, 32, '[ CONTINUE ]',      ENGINE.isButtonHovered(canvasW/2-110,424,220,32), {color: PLAYER.hasSave() ? '#0055BF' : '#3D3D3D', fontSize:10});
-    ENGINE.drawButton(canvasW/2-110, 462, 220, 24, '[ HOW TO PLAY ]',   ENGINE.isButtonHovered(canvasW/2-110,462,220,24), {color:'#6C6E68', fontSize:9});
+    // Each button is "active" if keyboard cursor points to it OR mouse hovers it
+    var sel0 = titleSel===0 || ENGINE.isButtonHovered(canvasW/2-110,386,220,32);
+    var sel1 = titleSel===1 || ENGINE.isButtonHovered(canvasW/2-110,424,220,32);
+    var sel2 = titleSel===2 || ENGINE.isButtonHovered(canvasW/2-110,462,220,24);
+    // Keyboard cursor arrow indicator
+    var arrowY = [402, 440, 474];
+    ctx.fillStyle = '#F2CD37';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText('▶', canvasW/2-116, arrowY[titleSel]);
+    ctx.textAlign = 'left';
+    ENGINE.drawButton(canvasW/2-110, 386, 220, 32, '[ NEW GAME ]',    sel0, {color:'#237841', fontSize:10});
+    ENGINE.drawButton(canvasW/2-110, 424, 220, 32, '[ CONTINUE ]',    sel1, {color: PLAYER.hasSave() ? '#0055BF' : '#3D3D3D', fontSize:10});
+    ENGINE.drawButton(canvasW/2-110, 462, 220, 24, '[ HOW TO PLAY ]', sel2, {color:'#6C6E68', fontSize:9});
 
     ctx.font = '7px monospace';
     ctx.fillStyle = '#6C6E68';
@@ -521,6 +659,7 @@ var UI = (function() {
     renderMenu, handleMenuInput, openMenu, closeMenu, isMenuOpen,
     renderShop, handleShopInput, openShop, closeShop, isShopOpen,
     renderPoliticalEvent, handleEventInput, showPoliticalEvent, isPoliticalEventOpen,
-    renderNotification, showNotification
+    renderNotification, showNotification,
+    renderControlsTab, handleControlsClicks
   };
 })();

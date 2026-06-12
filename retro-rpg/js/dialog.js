@@ -80,8 +80,8 @@ var DIALOG = (function() {
     if (!state) return false;
 
     if (state.phase === 'typing') {
-      // Skip typewriter on Space/Enter/Click
-      if (ENGINE.isKeyJust('Space') || ENGINE.isKeyJust('Enter') || ENGINE.wasClicked()) {
+      // Skip typewriter on confirm/click
+      if (ENGINE.action('confirm') || ENGINE.wasClicked()) {
         state.displayText = state.fullText;
         state.charIdx     = state.fullText.length;
         state.textDone    = true;
@@ -95,7 +95,7 @@ var DIALOG = (function() {
     }
 
     if (state.phase === 'await_continue') {
-      if (ENGINE.isKeyJust('Space') || ENGINE.isKeyJust('Enter') || ENGINE.wasClicked()) {
+      if (ENGINE.action('confirm') || ENGINE.wasClicked()) {
         // Check for node action
         executeNodeAction(state.currentNode);
         advanceOrEnd(null);
@@ -107,15 +107,15 @@ var DIALOG = (function() {
       var choices = state.choices;
 
       // Keyboard navigation
-      if (ENGINE.isKeyJust('ArrowUp') || ENGINE.isKeyJust('KeyW')) {
+      if (ENGINE.action('up')) {
         state.selectedChoice = (state.selectedChoice - 1 + choices.length) % choices.length;
       }
-      if (ENGINE.isKeyJust('ArrowDown') || ENGINE.isKeyJust('KeyS')) {
+      if (ENGINE.action('down')) {
         state.selectedChoice = (state.selectedChoice + 1) % choices.length;
       }
 
       // Confirm selection
-      if (ENGINE.isKeyJust('Space') || ENGINE.isKeyJust('Enter')) {
+      if (ENGINE.action('confirm')) {
         selectChoice(state.selectedChoice);
         return true;
       }

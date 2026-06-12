@@ -43,10 +43,10 @@ var CHARGEN = (function() {
   }
 
   function handleKingdomInput() {
-    if (ENGINE.isKeyJust('ArrowLeft')  || ENGINE.isKeyJust('KeyA')) state.selectedKing = (state.selectedKing - 1 + KINGDOMS.length) % KINGDOMS.length;
-    if (ENGINE.isKeyJust('ArrowRight') || ENGINE.isKeyJust('KeyD')) state.selectedKing = (state.selectedKing + 1) % KINGDOMS.length;
+    if (ENGINE.action('left'))  state.selectedKing = (state.selectedKing - 1 + KINGDOMS.length) % KINGDOMS.length;
+    if (ENGINE.action('right')) state.selectedKing = (state.selectedKing + 1) % KINGDOMS.length;
 
-    if (ENGINE.isKeyJust('Enter') || ENGINE.isKeyJust('Space')) { state.page = 1; return; }
+    if (ENGINE.action('confirm')) { state.page = 1; return; }
 
     // Mouse clicks on kingdom cards
     KINGDOMS.forEach(function(k, i) {
@@ -63,10 +63,10 @@ var CHARGEN = (function() {
   }
 
   function handleOriginInput() {
-    if (ENGINE.isKeyJust('ArrowLeft')  || ENGINE.isKeyJust('KeyA')) state.selectedOrigin = (state.selectedOrigin - 1 + ORIGINS.length) % ORIGINS.length;
-    if (ENGINE.isKeyJust('ArrowRight') || ENGINE.isKeyJust('KeyD')) state.selectedOrigin = (state.selectedOrigin + 1) % ORIGINS.length;
-    if (ENGINE.isKeyJust('Backspace')  || ENGINE.isKeyJust('Escape')) { state.page = 0; return; }
-    if (ENGINE.isKeyJust('Enter')      || ENGINE.isKeyJust('Space'))  { state.page = 2; return; }
+    if (ENGINE.action('left'))   state.selectedOrigin = (state.selectedOrigin - 1 + ORIGINS.length) % ORIGINS.length;
+    if (ENGINE.action('right'))  state.selectedOrigin = (state.selectedOrigin + 1) % ORIGINS.length;
+    if (ENGINE.action('cancel'))  { state.page = 0; return; }
+    if (ENGINE.action('confirm')) { state.page = 2; return; }
 
     ORIGINS.forEach(function(o, i) {
       var bx = 60 + i * 124;
@@ -77,8 +77,8 @@ var CHARGEN = (function() {
   }
 
   function handleNameInput() {
-    if (ENGINE.isKeyJust('Escape')) { state.page = 1; return; }
-    if (ENGINE.isKeyJust('Enter'))  { if (state.name.trim()) state.page = 3; return; }
+    if (ENGINE.action('cancel'))  { state.page = 1; return; }
+    if (ENGINE.action('confirm')) { if (state.name.trim()) state.page = 3; return; }
 
     // Backspace
     if (ENGINE.isKeyJust('Backspace')) {
@@ -99,11 +99,11 @@ var CHARGEN = (function() {
 
   function handleConfirmInput() {
     // Confirm
-    if (ENGINE.isKeyJust('Enter') || ENGINE.isButtonClicked(280, 430, 240, 36)) {
+    if (ENGINE.action('confirm') || ENGINE.isButtonClicked(280, 430, 240, 36)) {
       if (onDone) onDone(state.name || 'Kael', KINGDOMS[state.selectedKing].id, ORIGINS[state.selectedOrigin].id);
     }
     // Back
-    if (ENGINE.isKeyJust('Escape') || ENGINE.isButtonClicked(280, 476, 240, 28)) {
+    if (ENGINE.action('cancel') || ENGINE.isButtonClicked(280, 476, 240, 28)) {
       state.page = 2;
     }
   }
