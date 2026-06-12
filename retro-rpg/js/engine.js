@@ -11,6 +11,8 @@ var ENGINE = (function() {
   var keysPressed = {};   // code → true only for the frame it was pressed
   var mousePos = { x:0, y:0 };
   var mouseClicked = false;
+  var mouseMoved   = false;  // true only on frames where the mouse moved —
+                             // hover may steal a keyboard selection only then
   var frameCount = 0;
   var captureCallback = null;  // set while waiting for a rebind keypress
 
@@ -18,6 +20,12 @@ var ENGINE = (function() {
   var tilesetImg   = null;
   var tilesetReady = false;
   var TILE_COUNT   = 14;   // ids 0..13 present in assets/tileset.png
+
+  // ── Doodad sprites (trees, bushes...) ──────────────────────
+  // 32x48 cells anchored at the bottom; ids match TERRAIN.DOODAD.
+  var doodadImg   = null;
+  var doodadReady = false;
+  var DOODAD_W = 32, DOODAD_H = 48;
 
   // Keys whose browser default (scrolling etc.) must be suppressed
   var PREVENT_DEFAULT = new Set([
@@ -155,6 +163,22 @@ var ENGINE = (function() {
     img.src = src;
   }
 
+  function loadDoodads(src, cb) {
+    var img = new Image();
+    img.onload  = function() { doodadImg = img; doodadReady = true; if (cb) cb(true); };
+    img.onerror = function() { doodadReady = false; if (cb) cb(false); };
+    img.src = src;
+  }
+
+  // Draw doodad `idx` so its base sits on the tile whose top-left screen
+  // position is (sx, sy). The sprite is taller than a tile, so it extends
+  // upward — y-sort it with entities for correct overlap.
+  function drawDoodad(idx, sx, sy) {
+    if (!doodadReady) return;
+    ctx.drawImage(doodadImg, idx * DOODAD_W, 0, DOODAD_W, DOODAD_H,
+                  sx, sy + TILE - DOODAD_H, DOODAD_W, DOODAD_H);
+  }
+
   function getCanvas() { return canvas; }
   function getCtx()    { return ctx; }
   function getFrame()  { return frameCount; }
@@ -187,6 +211,7 @@ var ENGINE = (function() {
       var r = canvas.getBoundingClientRect();
       mousePos.x = (e.clientX - r.left) * (canvas.width  / r.width);
       mousePos.y = (e.clientY - r.top)  * (canvas.height / r.height);
+      mouseMoved = true;
     });
     canvas.addEventListener('click', function(e) {
       var r = canvas.getBoundingClientRect();
@@ -210,7 +235,10 @@ var ENGINE = (function() {
   function endFrame() {
     keysPressed  = {};
     mouseClicked = false;
+    mouseMoved   = false;
   }
+
+  function didMouseMove() { return mouseMoved; }
 
   // ── Action-based input (uses the binding map) ─────────────
   function action(name) {  // just pressed this frame
@@ -232,16 +260,20 @@ var ENGINE = (function() {
   }
 
   // ── Camera ─────────────────────────────────────────────────
-  // viewW/viewH are passed in TILES (VIEW_W/TILE). Finite maps keep the
-  // original clamped follow; infinite procedural maps center the player.
+  // All args are in TILES (world.js passes VIEW_W/TILE).
+  // - Infinite procedural maps: center the player, no clamping.
+  // - Finite maps larger than the view: follow the player, clamped to edges.
+  // - Finite maps smaller than the view (towns): center the whole map.
+  // (The old code divided viewW by TILE a second time, pinning the camera
+  //  near the player's coord and rendering towns as a strip at far left.)
   function setCamera(x, y, mapW, mapH, viewW, viewH) {
-    if (mapW !== Infinity && mapH !== Infinity) {
-      camera.x = Math.max(0, Math.min(x - viewW/2/TILE, mapW - viewW/TILE));
-      camera.y = Math.max(0, Math.min(y - viewH/2/TILE, mapH - viewH/TILE));
+    if (mapW === Infinity || mapH === Infinity) {
+      camera.x = x - viewW/2;
+      camera.y = y - viewH/2;
       return;
     }
-    camera.x = x - viewW/2;
-    camera.y = y - viewH/2;
+    camera.x = (mapW <= viewW) ? (mapW - viewW)/2 : Math.max(0, Math.min(x - viewW/2, mapW - viewW));
+    camera.y = (mapH <= viewH) ? (mapH - viewH)/2 : Math.max(0, Math.min(y - viewH/2, mapH - viewH));
   }
   function getCamera() { return camera; }
 
@@ -459,6 +491,15 @@ var ENGINE = (function() {
   }
 
   // ── Map renderer ───────────────────────────────────────────
+  // Tile lookup that works for both finite arrays and procedural maps.
+  // Out-of-bounds returns -1 (treated as "nothing" by the edge effects).
+  function mapTileAt(mapData, proc, tx, ty) {
+    if (proc) return mapData.getTile(tx, ty);
+    if (tx < 0 || ty < 0 || tx >= mapData.width || ty >= mapData.height) return -1;
+    var row = mapData.tiles[ty];
+    return row ? row[tx] : -1;
+  }
+
   function drawMap(mapData, offsetX, offsetY, viewW, viewH) {
     var tX = Math.floor(camera.x);
     var tY = Math.floor(camera.y);
@@ -466,6 +507,7 @@ var ENGINE = (function() {
     var tilesH = Math.ceil(viewH / TILE) + 1;
     // Procedural maps supply tiles on demand and have no fixed bounds.
     var proc = !!(mapData.procedural && typeof mapData.getTile === 'function');
+    var WATER = DATA.TILE.WATER, WALL = DATA.TILE.WALL, DGW = DATA.TILE.DG_WALL, MTN = DATA.TILE.MOUNTAIN;
 
     for (var ty = tY; ty < tY + tilesH; ty++) {
       if (!proc && (ty < 0 || ty >= mapData.height)) continue;
@@ -474,9 +516,63 @@ var ENGINE = (function() {
       for (var tx = tX; tx < tX + tilesW; tx++) {
         if (!proc && (tx < 0 || tx >= mapData.width)) continue;
         var tileId = proc ? mapData.getTile(tx, ty) : row[tx];
-        var sx = offsetX + (tx - tX) * TILE - (camera.x - tX) * TILE;
-        var sy = offsetY + (ty - tY) * TILE - (camera.y - tY) * TILE;
-        drawTile(tileId, Math.round(sx), Math.round(sy));
+        var sx = Math.round(offsetX + (tx - tX) * TILE - (camera.x - tX) * TILE);
+        var sy = Math.round(offsetY + (ty - tY) * TILE - (camera.y - tY) * TILE);
+        drawTile(tileId, sx, sy);
+
+        // ── 2.5D edge effects (need neighbors, so they live here) ──
+        if (tileId === WATER) {
+          // Foam line where water touches land above / beside it.
+          var up = mapTileAt(mapData, proc, tx, ty - 1);
+          if (up !== WATER && up !== -1 && up !== DATA.TILE.VOID) {
+            ctx.fillStyle = 'rgba(225,240,255,0.75)';
+            ctx.fillRect(sx, sy, TILE, 3);
+            ctx.fillStyle = 'rgba(225,240,255,0.30)';
+            ctx.fillRect(sx, sy + 3, TILE, 2);
+          }
+          var lf = mapTileAt(mapData, proc, tx - 1, ty);
+          if (lf !== WATER && lf !== -1 && lf !== DATA.TILE.VOID) {
+            ctx.fillStyle = 'rgba(225,240,255,0.45)';
+            ctx.fillRect(sx, sy, 2, TILE);
+          }
+          var rt = mapTileAt(mapData, proc, tx + 1, ty);
+          if (rt !== WATER && rt !== -1 && rt !== DATA.TILE.VOID) {
+            ctx.fillStyle = 'rgba(225,240,255,0.45)';
+            ctx.fillRect(sx + TILE - 2, sy, 2, TILE);
+          }
+        } else if (tileId === WALL || tileId === DGW || tileId === MTN) {
+          // Fake block height: lit top edge when open above, shadowed
+          // front face when open below — flat squares become blocks.
+          var above = mapTileAt(mapData, proc, tx, ty - 1);
+          var below = mapTileAt(mapData, proc, tx, ty + 1);
+          var solidA = (above === tileId);
+          var solidB = (below === tileId);
+          if (!solidA) {
+            ctx.fillStyle = 'rgba(255,255,255,0.30)';
+            ctx.fillRect(sx, sy, TILE, 3);
+          }
+          if (!solidB && below !== -1) {
+            ctx.fillStyle = 'rgba(0,0,0,0.38)';
+            ctx.fillRect(sx, sy + TILE - 8, TILE, 8);
+            ctx.fillStyle = 'rgba(0,0,0,0.18)';
+            ctx.fillRect(sx, sy + TILE - 12, TILE, 4);
+          }
+        }
+      }
+    }
+
+    // Soft drop shadow cast onto the tile below south-facing walls,
+    // grounding them like raised geometry.
+    for (var ty2 = tY; ty2 < tY + tilesH; ty2++) {
+      for (var tx2 = tX; tx2 < tX + tilesW; tx2++) {
+        var t = mapTileAt(mapData, proc, tx2, ty2);
+        if (t !== WALL && t !== DGW && t !== MTN) continue;
+        var b = mapTileAt(mapData, proc, tx2, ty2 + 1);
+        if (b === t || b === -1 || b === WATER) continue;
+        var ssx = Math.round(offsetX + (tx2 - tX) * TILE - (camera.x - tX) * TILE);
+        var ssy = Math.round(offsetY + (ty2 + 1 - tY) * TILE - (camera.y - tY) * TILE);
+        ctx.fillStyle = 'rgba(0,0,0,0.22)';
+        ctx.fillRect(ssx, ssy, TILE, 6);
       }
     }
   }
@@ -962,7 +1058,7 @@ var ENGINE = (function() {
   }
 
   return {
-    init, loadTileset, getCanvas, getCtx, getFrame, tick,
+    init, loadTileset, loadDoodads, drawDoodad, getCanvas, getCtx, getFrame, tick,
     clear, darken, lighten,
     drawTile, drawMap, drawLegoBrick, drawStudPattern,
     drawMinifigure, drawFigureAt, drawWorldMarker,
@@ -971,7 +1067,7 @@ var ENGINE = (function() {
     addFloatText, screenFlash,
     isButtonHovered, isButtonClicked,
     setCamera, getCamera,
-    isKeyDown, isKeyJust, getMousePos, wasClicked, clearKeys, endFrame,
+    isKeyDown, isKeyJust, getMousePos, wasClicked, didMouseMove, clearKeys, endFrame,
     action, actionHeld,
     getBindings, getActionLabels, rebindKey, resetBindings, isCapturing, keyLabel,
     TILE

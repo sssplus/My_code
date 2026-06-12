@@ -404,7 +404,7 @@ var UI = (function() {
           showNotification('Not enough gold!', '#C91A09');
         }
       }
-      if (ENGINE.isButtonHovered(canvasW/2-150, by, 300, 32)) shopState.selIdx = i;
+      if (ENGINE.didMouseMove() && ENGINE.isButtonHovered(canvasW/2-150, by, 300, 32)) shopState.selIdx = i;
     });
 
     if (ENGINE.isButtonClicked(canvasW/2-80, 130 + shopState.items.length*36 + 10, 160, 28)) {
@@ -456,24 +456,34 @@ var UI = (function() {
 
   function isPoliticalEventOpen() { return !!eventState; }
 
+  function chooseEventOption(i) {
+    if (!eventState) return;
+    var ev = eventState.event;
+    eventState.open = false;
+    if (eventState.onChoice) eventState.onChoice(ev.id, i);
+    eventState = null;
+  }
+
   function handleEventInput() {
     if (!eventState) return;
     var ev = eventState.event;
     var canvasW = ENGINE.getCanvas().width;
-    var canvasH = ENGINE.getCanvas().height;
+
+    // Keyboard: navigate + confirm + number quick-select
+    if (ENGINE.action('up'))   eventState.selIdx = (eventState.selIdx - 1 + ev.options.length) % ev.options.length;
+    if (ENGINE.action('down')) eventState.selIdx = (eventState.selIdx + 1) % ev.options.length;
+    if (ENGINE.action('confirm')) { chooseEventOption(eventState.selIdx); return; }
+    for (var k = 0; k < ev.options.length; k++) {
+      if (ENGINE.isKeyJust('Digit' + (k+1))) { chooseEventOption(k); return; }
+    }
 
     ev.options.forEach(function(opt, i) {
       var by = 210 + i*40;
-      if (ENGINE.isButtonClicked(canvasW/2-220, by, 440, 36)) {
-        var choice = i;
-        eventState.open = false;
-        if (eventState.onChoice) eventState.onChoice(ev.id, choice);
-        eventState = null;
-      }
-      if (ENGINE.isButtonHovered(canvasW/2-220, by, 440, 36)) eventState.selIdx = i;
+      if (eventState && ENGINE.isButtonClicked(canvasW/2-220, by, 440, 36)) chooseEventOption(i);
+      if (eventState && ENGINE.didMouseMove() && ENGINE.isButtonHovered(canvasW/2-220, by, 440, 36)) eventState.selIdx = i;
     });
 
-    if (ENGINE.action('cancel')) {
+    if (eventState && ENGINE.action('cancel')) {
       eventState = null;
     }
   }

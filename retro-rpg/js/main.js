@@ -54,6 +54,7 @@ var GAME = (function() {
     // renders until the atlas finishes loading, so boot never blocks).
     TERRAIN.init(20260612);
     ENGINE.loadTileset('assets/tileset.png');
+    ENGINE.loadDoodads('assets/doodads.png');
 
     // Keyboard for chargen name entry (printable chars only; ENGINE handles the rest)
     document.addEventListener('keydown', function(e) {
@@ -169,7 +170,11 @@ var GAME = (function() {
       case STATE.DIALOG:     DIALOG.update(dt); DIALOG.handleInput(); break;
       case STATE.MENU:       UI.handleMenuInput(); break;
       case STATE.SHOP:       UI.handleShopInput(); break;
-      case STATE.POL_EVENT:  UI.handleEventInput(); break;
+      case STATE.POL_EVENT:
+        UI.handleEventInput();
+        // Modal resolved or dismissed → hand control back to the world
+        if (!UI.isPoliticalEventOpen()) transition(STATE.WORLD);
+        break;
       case STATE.GAME_OVER:  updateGameOver(); break;
     }
   }
@@ -188,7 +193,7 @@ var GAME = (function() {
 
     // Mouse hover updates selection
     TITLE_ITEMS.forEach(function(id, i) {
-      if (ENGINE.isButtonHovered(cW/2-110, itemY[i], 220, 32)) titleSel = i;
+      if (ENGINE.didMouseMove() && ENGINE.isButtonHovered(cW/2-110, itemY[i], 220, 32)) titleSel = i;
     });
 
     var confirmed = ENGINE.action('confirm') || ENGINE.isButtonClicked(cW/2-110, itemY[titleSel], 220, 36);

@@ -1012,7 +1012,7 @@ var COMBAT = (function() {
 
     skills.forEach(function(skillId, i) {
       var by = my + i * 28;
-      if (ENGINE.isButtonHovered(mx, by, mw, 24)) state.skillSel = i;
+      if (ENGINE.didMouseMove() && ENGINE.isButtonHovered(mx, by, mw, 24)) state.skillSel = i;
       if (ENGINE.isButtonClicked(mx, by, mw, 24)) {
         state.showingSkills = false;
         playerSkill(skillId);
@@ -1039,7 +1039,7 @@ var COMBAT = (function() {
 
     inventory.forEach(function(slot, i) {
       var by = my + i * 28;
-      if (ENGINE.isButtonHovered(mx, by, mw, 24)) state.itemSel = i;
+      if (ENGINE.didMouseMove() && ENGINE.isButtonHovered(mx, by, mw, 24)) state.itemSel = i;
       if (ENGINE.isButtonClicked(mx, by, mw, 24)) {
         state.showingItems = false;
         playerItem(slot.id);

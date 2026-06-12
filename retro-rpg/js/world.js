@@ -307,21 +307,18 @@ var WORLD = (function() {
   }
 
   // ── Render ─────────────────────────────────────────────────
+  // Scene pass is y-sorted: doodads (trees etc.), NPCs, enemies and the
+  // player all draw in row order, so taller sprites correctly overlap
+  // whatever stands behind them — that's what sells the 2.5D depth.
   function render(ctx, offsetX, offsetY) {
     if (!currentZone) return;
 
     // Draw tilemap
     ENGINE.drawMap(currentZone, offsetX, offsetY, VIEW_W, VIEW_H);
 
-    // Ambient environment overlay
-    if (zoneEnv && zoneEnv.ambient) {
-      ctx.fillStyle = zoneEnv.ambient;
-      ctx.fillRect(offsetX, offsetY, VIEW_W, VIEW_H);
-    }
-
     var cam = ENGINE.getCamera();
 
-    // World map special elements
+    // World map special elements (flat, under the scene pass)
     if (currentZone.isWorldMap) {
       // Kingdom markers
       DATA.WORLD_MAP.markers.forEach(function(m) {
@@ -340,75 +337,119 @@ var WORLD = (function() {
       });
     }
 
-    // Draw NPCs
+    var drawables = [];
+
+    // Environment doodads in the visible window (+1 ring so tall
+    // sprites just below the viewport still poke into view).
+    var tX0 = Math.floor(cam.x) - 1;
+    var tY0 = Math.floor(cam.y) - 1;
+    var tilesW = Math.ceil(VIEW_W / TILE) + 3;
+    var tilesH = Math.ceil(VIEW_H / TILE) + 3;
+    for (var wy = tY0; wy < tY0 + tilesH; wy++) {
+      for (var wx = tX0; wx < tX0 + tilesW; wx++) {
+        var tid = currentTileAt(wx, wy);
+        var dd  = TERRAIN.decorAt(tid, wx, wy);
+        if (dd >= 0) {
+          drawables.push({ y: wy - 0.1, wx: wx, wy: wy, dd: dd, kind: 'doodad' });
+        }
+      }
+    }
+
+    // NPCs
     if (currentZone.npcs) {
       currentZone.npcs.forEach(function(npc) {
         var ns = npcStates[npc.id];
-        if (!ns) return;
-        var sx = Math.round(offsetX + (ns.x - cam.x) * TILE + TILE/2);
-        var sy = Math.round(offsetY + (ns.y - cam.y) * TILE + TILE - 2);
-        ENGINE.drawMinifigure(sx, sy, {
-          torsoColor: npc.color || '#9BA19D',
-          legColor:   ENGINE.darken(npc.color || '#9BA19D', 30),
-          headColor:  npc.headColor || '#F2CD37',
-          scale:      0.85,
-          emotion:    'neutral'
-        });
-        // NPC name tag
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(sx-24, sy-50, 48, 12);
-        ENGINE.drawText(npc.name.substring(0,8), sx-22, sy-41, {size:6, color:'#F2CD37'});
-        // Interaction indicator
-        ENGINE.drawText('●', sx-2, sy-52, {size:8, color:'#F2CD37'});
+        if (ns) drawables.push({ y: ns.y, npc: npc, ns: ns, kind: 'npc' });
       });
     }
 
-    // Draw enemies on map
+    // Enemies
     zoneEnemies.forEach(function(enemy) {
-      if (!enemy.alive) return;
-      var def = DATA.ENEMIES[enemy.type];
-      if (!def) return;
-      var ex = Math.round(offsetX + (enemy.x - cam.x) * TILE + TILE/2);
-      var ey = Math.round(offsetY + (enemy.y - cam.y) * TILE + TILE - 2);
-      ENGINE.drawMinifigure(ex, ey, {
-        torsoColor: def.torsoColor,
-        legColor:   def.legColor,
-        headColor:  def.headColor || '#E4CD9E',
-        scale:      enemy.isBoss ? 1.1 : 0.85,
-        facingLeft: true,
-        emotion:    'stern'
-      });
-      // Enemy skull indicator
-      ctx.fillStyle = '#C91A09';
-      ctx.beginPath();
-      ctx.arc(ex, ey-50, 6, 0, Math.PI*2);
-      ctx.fill();
-      ENGINE.drawText('!', ex-2, ey-44, {size:8, color:'#FFF', bold:true});
+      if (enemy.alive && DATA.ENEMIES[enemy.type]) drawables.push({ y: enemy.y, enemy: enemy, kind: 'enemy' });
     });
 
-    // Draw player
+    // Player
     var p = PLAYER.get();
-    if (p) {
-      var px = Math.round(offsetX + (p.x - cam.x) * TILE + TILE/2);
-      var py = Math.round(offsetY + (p.y - cam.y) * TILE + TILE - 2);
-      ENGINE.drawMinifigure(px, py, {
-        torsoColor: p.torsoColor,
-        legColor:   p.legColor,
-        headColor:  p.headColor || '#F2CD37',
-        weapon:     p.weapon,
-        hat:        p.hat,
-        scale:      1.0,
-        facingLeft: p.facingLeft,
-        emotion:    'neutral'
-      });
-      // Player marker (arrow above head)
-      ctx.fillStyle = '#F2CD37';
-      ctx.beginPath();
-      ctx.moveTo(px, py-52);
-      ctx.lineTo(px-5, py-44);
-      ctx.lineTo(px+5, py-44);
-      ctx.closePath();
-      ctx.fill();
+    if (p) drawables.push({ y: p.y, kind: 'player' });
+
+    drawables.sort(function(a, b) { return a.y - b.y; });
+
+    drawables.forEach(function(d) {
+      switch (d.kind) {
+        case 'doodad': {
+          var dsx = Math.round(offsetX + (d.wx - cam.x) * TILE);
+          var dsy = Math.round(offsetY + (d.wy - cam.y) * TILE);
+          ENGINE.drawDoodad(d.dd, dsx, dsy);
+          break;
+        }
+        case 'npc': {
+          var sx = Math.round(offsetX + (d.ns.x - cam.x) * TILE + TILE/2);
+          var sy = Math.round(offsetY + (d.ns.y - cam.y) * TILE + TILE - 2);
+          ENGINE.drawMinifigure(sx, sy, {
+            torsoColor: d.npc.color || '#9BA19D',
+            legColor:   ENGINE.darken(d.npc.color || '#9BA19D', 30),
+            headColor:  d.npc.headColor || '#F2CD37',
+            scale:      0.85,
+            emotion:    'neutral'
+          });
+          // NPC name tag
+          ctx.fillStyle = 'rgba(0,0,0,0.7)';
+          ctx.fillRect(sx-24, sy-50, 48, 12);
+          ENGINE.drawText(d.npc.name.substring(0,8), sx-22, sy-41, {size:6, color:'#F2CD37'});
+          // Interaction indicator
+          ENGINE.drawText('●', sx-2, sy-52, {size:8, color:'#F2CD37'});
+          break;
+        }
+        case 'enemy': {
+          var def = DATA.ENEMIES[d.enemy.type];
+          var ex = Math.round(offsetX + (d.enemy.x - cam.x) * TILE + TILE/2);
+          var ey = Math.round(offsetY + (d.enemy.y - cam.y) * TILE + TILE - 2);
+          ENGINE.drawMinifigure(ex, ey, {
+            torsoColor: def.torsoColor,
+            legColor:   def.legColor,
+            headColor:  def.headColor || '#E4CD9E',
+            scale:      d.enemy.isBoss ? 1.1 : 0.85,
+            facingLeft: true,
+            emotion:    'stern'
+          });
+          // Enemy skull indicator
+          ctx.fillStyle = '#C91A09';
+          ctx.beginPath();
+          ctx.arc(ex, ey-50, 6, 0, Math.PI*2);
+          ctx.fill();
+          ENGINE.drawText('!', ex-2, ey-44, {size:8, color:'#FFF', bold:true});
+          break;
+        }
+        case 'player': {
+          var px = Math.round(offsetX + (p.x - cam.x) * TILE + TILE/2);
+          var py = Math.round(offsetY + (p.y - cam.y) * TILE + TILE - 2);
+          ENGINE.drawMinifigure(px, py, {
+            torsoColor: p.torsoColor,
+            legColor:   p.legColor,
+            headColor:  p.headColor || '#F2CD37',
+            weapon:     p.weapon,
+            hat:        p.hat,
+            scale:      1.0,
+            facingLeft: p.facingLeft,
+            emotion:    'neutral'
+          });
+          // Player marker (arrow above head)
+          ctx.fillStyle = '#F2CD37';
+          ctx.beginPath();
+          ctx.moveTo(px, py-52);
+          ctx.lineTo(px-5, py-44);
+          ctx.lineTo(px+5, py-44);
+          ctx.closePath();
+          ctx.fill();
+          break;
+        }
+      }
+    });
+
+    // Ambient environment tint over the whole scene (incl. doodads)
+    if (zoneEnv && zoneEnv.ambient) {
+      ctx.fillStyle = zoneEnv.ambient;
+      ctx.fillRect(offsetX, offsetY, VIEW_W, VIEW_H);
     }
   }
 

@@ -68,20 +68,13 @@ def painter_path():
     return solid_noise(base, light, dark, 202, 0.22, 0.2)
 
 def painter_forest():
-    ground = solid_noise((30, 95, 55), (42, 120, 70), (22, 75, 45), 303, 0.1, 0.1)
-    # two round tree canopies
-    trees = [(4, 5, 3), (11, 9, 3)]
-    trunk = {(4, 9), (4, 10), (11, 13), (11, 14)}
+    # Forest floor only — darker, mossier grass. The actual trees are
+    # tall doodad sprites drawn (y-sorted) on top, JRPG-style.
+    ground = solid_noise((28, 88, 50), (38, 108, 62), (20, 70, 40), 303, 0.12, 0.14)
+    tufts = {(3, 4), (3, 3), (9, 11), (9, 10), (13, 6), (6, 13), (6, 12)}
     def p(x, y):
-        for (cx, cy, rad) in trees:
-            d2 = (x - cx) ** 2 + (y - cy) ** 2
-            if d2 <= rad * rad:
-                edge = d2 >= (rad - 1) * (rad - 1)
-                return (20, 70, 40) if edge else (34, 110, 58)
-            if d2 <= (rad + 1) * (rad + 1):
-                pass
-        if (x, y) in trunk:
-            return (70, 45, 25)
+        if (x, y) in tufts:
+            return (52, 128, 70)
         return ground(x, y)
     return p
 
@@ -214,24 +207,123 @@ PAINTERS = [
     painter_snow(),      # 13
 ]
 
-def main():
-    here = os.path.dirname(os.path.abspath(__file__))
-    out = os.path.normpath(os.path.join(here, "..", "assets", "tileset.png"))
-    img = Image.new("RGBA", (N_TILES * TILE, TILE), (0, 0, 0, 0))
+# ============================================================================
+# Doodad sprites — tall environment objects (trees, bushes, rocks...)
+# drawn over the tilemap and y-sorted with the player for 2.5D depth.
+# Sheet: doodads.png, cells 32px wide x 48px tall, anchored at the bottom.
+# Logical resolution 16x24, scaled 2x. Index order must match
+# ENGINE/TERRAIN DOODAD ids in the JS.
+# ============================================================================
+D_W, D_H = 16, 24  # logical doodad size
+
+def dd_oak(x, y):
+    # trunk
+    if 7 <= x <= 8 and 16 <= y <= 23:
+        return (96, 62, 32) if x == 7 else (74, 46, 22)
+    # canopy: big blob
+    cx, cy = 7.5, 9
+    d2 = (x - cx) ** 2 + ((y - cy) * 1.15) ** 2
+    if d2 <= 52:
+        if d2 >= 40:
+            return (24, 86, 44)
+        # dappled light upper-left
+        if (x + y) % 4 == 0 and x < 9 and y < 10:
+            return (74, 168, 92)
+        return (44, 128, 64)
+    return None
+
+def dd_pine(x, y):
+    if 7 <= x <= 8 and 19 <= y <= 23:
+        return (90, 58, 30)
+    # three triangle layers
+    for (ty, h, hw) in ((2, 7, 4), (7, 7, 5), (12, 8, 6)):
+        if ty <= y < ty + h:
+            w = hw * (y - ty + 1) / h
+            if abs(x - 7.5) <= w:
+                edge = abs(x - 7.5) >= w - 0.9
+                return (16, 74, 46) if edge else (30, 104, 60)
+    return None
+
+def dd_bush(x, y):
+    cx, cy = 7.5, 19
+    d2 = (x - cx) ** 2 + ((y - cy) * 1.6) ** 2
+    if d2 <= 30:
+        if d2 >= 22:
+            return (26, 92, 48)
+        if (x * 3 + y * 5) % 7 == 0:
+            return (88, 172, 96)
+        return (46, 132, 66)
+    return None
+
+def dd_flowers(x, y):
+    if y < 17:
+        return None
+    pts = {(3, 19): (235, 90, 110), (6, 21): (240, 210, 80),
+           (9, 18): (235, 90, 110), (12, 20): (160, 120, 230),
+           (5, 18): (240, 210, 80), (11, 22): (235, 90, 110)}
+    for (fx, fy), c in pts.items():
+        if abs(x - fx) <= 1 and abs(y - fy) <= 1 and (abs(x - fx) + abs(y - fy)) < 2:
+            return c
+        if x == fx and y == fy + 1:
+            return (40, 110, 50)
+    return None
+
+def dd_rock(x, y):
+    cx, cy = 7.5, 20
+    d2 = (x - cx) ** 2 + ((y - cy) * 2.0) ** 2
+    if d2 <= 26:
+        if y <= 18 and d2 < 16:
+            return (150, 150, 158)
+        if d2 >= 20:
+            return (84, 84, 92)
+        return (116, 116, 124)
+    return None
+
+def dd_dead_tree(x, y):
+    if 7 <= x <= 8 and 8 <= y <= 23:
+        return (70, 56, 44) if x == 7 else (52, 40, 30)
+    # bare branches
+    branches = {(5, 9), (6, 9), (4, 8), (9, 10), (10, 10), (11, 9), (6, 6), (7, 6), (9, 7)}
+    if (x, y) in branches:
+        return (64, 50, 38)
+    return None
+
+def dd_snow_pine(x, y):
+    c = dd_pine(x, y)
+    if c is None:
+        return None
+    # snow caps on layer tops
+    for ty in (2, 7, 12):
+        if y in (ty, ty + 1):
+            return (236, 244, 252)
+    return c
+
+DOODADS = [dd_oak, dd_pine, dd_bush, dd_flowers, dd_rock, dd_dead_tree, dd_snow_pine]
+
+def write_sheet(path, painters, lw, lh):
+    img = Image.new("RGBA", (len(painters) * lw * PX, lh * PX), (0, 0, 0, 0))
     px = img.load()
-    for tid, painter in enumerate(PAINTERS):
-        ox = tid * TILE
-        for ly in range(LOGICAL):
-            for lx in range(LOGICAL):
+    for idx, painter in enumerate(painters):
+        ox = idx * lw * PX
+        for ly in range(lh):
+            for lx in range(lw):
                 col = painter(lx, ly)
+                if col is None:
+                    continue
                 if len(col) == 3:
                     col = col + (255,)
-                # scale 2x
                 for dy in range(PX):
                     for dx in range(PX):
                         px[ox + lx * PX + dx, ly * PX + dy] = col
-    img.save(out)
-    print("wrote", out, img.size)
+    img.save(path)
+    print("wrote", path, img.size)
+
+def main():
+    here = os.path.dirname(os.path.abspath(__file__))
+    assets = os.path.normpath(os.path.join(here, "..", "assets"))
+    write_sheet(os.path.join(assets, "tileset.png"),
+                [lambda x, y, p=p: p(x, y) for p in PAINTERS], LOGICAL, LOGICAL)
+    write_sheet(os.path.join(assets, "doodads.png"), DOODADS, D_W, D_H)
 
 if __name__ == "__main__":
     main()

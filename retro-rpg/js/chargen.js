@@ -56,7 +56,7 @@ var CHARGEN = (function() {
         state.selectedKing = i;
         state.page = 1;
       }
-      if (ENGINE.isButtonHovered(bx, by, 136, 220)) {
+      if (ENGINE.didMouseMove() && ENGINE.isButtonHovered(bx, by, 136, 220)) {
         state.selectedKing = i;
       }
     });
@@ -72,7 +72,7 @@ var CHARGEN = (function() {
       var bx = 60 + i * 124;
       var by = 200;
       if (ENGINE.isButtonClicked(bx, by, 114, 230)) { state.selectedOrigin = i; state.page = 2; }
-      if (ENGINE.isButtonHovered(bx, by, 114, 230))  state.selectedOrigin = i;
+      if (ENGINE.didMouseMove() && ENGINE.isButtonHovered(bx, by, 114, 230)) state.selectedOrigin = i;
     });
   }
 
