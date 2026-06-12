@@ -173,10 +173,67 @@ var ENGINE = (function() {
   // Draw doodad `idx` so its base sits on the tile whose top-left screen
   // position is (sx, sy). The sprite is taller than a tile, so it extends
   // upward — y-sort it with entities for correct overlap.
-  function drawDoodad(idx, sx, sy) {
+  // `sway` (px, optional) shears the upper 2/3 sideways while the base
+  // stays planted, so foliage drifts in the wind without sliding around.
+  function drawDoodad(idx, sx, sy, sway) {
     if (!doodadReady) return;
-    ctx.drawImage(doodadImg, idx * DOODAD_W, 0, DOODAD_W, DOODAD_H,
-                  sx, sy + TILE - DOODAD_H, DOODAD_W, DOODAD_H);
+    var top = sy + TILE - DOODAD_H;
+    var s = Math.round(sway || 0);
+    if (s === 0) {
+      ctx.drawImage(doodadImg, idx * DOODAD_W, 0, DOODAD_W, DOODAD_H,
+                    sx, top, DOODAD_W, DOODAD_H);
+      return;
+    }
+    var split = Math.floor(DOODAD_H * 2 / 3);
+    ctx.drawImage(doodadImg, idx * DOODAD_W, 0, DOODAD_W, split,
+                  sx + s, top, DOODAD_W, split);
+    ctx.drawImage(doodadImg, idx * DOODAD_W, split, DOODAD_W, DOODAD_H - split,
+                  sx, top + split, DOODAD_W, DOODAD_H - split);
+  }
+
+  // Soft contact shadow under a sprite — grounds it against the terrain.
+  // (cx, cy) is the sprite's base center; rx/ry the ellipse radii.
+  function drawShadow(cx, cy, rx, ry, alpha) {
+    ctx.fillStyle = 'rgba(8,12,20,' + (alpha || 0.28) + ')';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry || rx * 0.38, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ── Post-processing: HD-2D style lighting over the world view ───────
+  // Warm sunlight wash + corner vignette + tilt-shift blur bands at the
+  // top and bottom of the viewport (the diorama depth-of-field look).
+  function postProcess(x, y, w, h) {
+    // Tilt-shift: re-draw blurred copies of the top/bottom strips of the
+    // already-rendered frame. Self-drawImage snapshots the source first.
+    if (typeof ctx.filter === 'string') {
+      blurBand(x, y, w, 64, 2.5, 0.55);
+      blurBand(x, y + 64, w, 28, 1.2, 0.35);
+      blurBand(x, y + h - 56, w, 56, 2.0, 0.45);
+    }
+    // Warm light falling from the top of the scene
+    var sun = ctx.createLinearGradient(x, y, x, y + h);
+    sun.addColorStop(0,    'rgba(255,232,180,0.12)');
+    sun.addColorStop(0.45, 'rgba(255,232,180,0.02)');
+    sun.addColorStop(1,    'rgba(40,40,90,0.08)');
+    ctx.fillStyle = sun;
+    ctx.fillRect(x, y, w, h);
+    // Vignette
+    var cx = x + w / 2, cy = y + h / 2;
+    var r = Math.sqrt(w * w + h * h) / 2;
+    var vg = ctx.createRadialGradient(cx, cy, r * 0.55, cx, cy, r);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(15,10,35,0.34)');
+    ctx.fillStyle = vg;
+    ctx.fillRect(x, y, w, h);
+  }
+
+  function blurBand(bx, by, bw, bh, blurPx, alpha) {
+    ctx.save();
+    ctx.filter = 'blur(' + blurPx + 'px)';
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(canvas, bx, by, bw, bh, bx, by, bw, bh);
+    ctx.restore();
   }
 
   function getCanvas() { return canvas; }
@@ -1058,7 +1115,8 @@ var ENGINE = (function() {
   }
 
   return {
-    init, loadTileset, loadDoodads, drawDoodad, getCanvas, getCtx, getFrame, tick,
+    init, loadTileset, loadDoodads, drawDoodad, drawShadow, postProcess,
+    getCanvas, getCtx, getFrame, tick,
     clear, darken, lighten,
     drawTile, drawMap, drawLegoBrick, drawStudPattern,
     drawMinifigure, drawFigureAt, drawWorldMarker,

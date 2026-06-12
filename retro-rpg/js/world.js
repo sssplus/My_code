@@ -337,7 +337,28 @@ var WORLD = (function() {
       });
     }
 
+    // Drifting cloud shadows over open terrain — cheap dynamic lighting.
+    // World-anchored so they slide across the ground, not the screen.
+    if (currentZone.isWorldMap || currentZone.procedural) {
+      var cf = ENGINE.getFrame();
+      for (var ci = 0; ci < 3; ci++) {
+        var span = 90 + ci * 25;                       // tiles between repeats
+        var cwx = ci * 31.7 + cf * (0.010 + ci * 0.004); // world x, drifting east
+        var cwy = ci * 23.3 + cf * 0.0035;
+        var csx = offsetX + ((((cwx - cam.x) % span) + span) % span - 12) * TILE;
+        var csy = offsetY + ((((cwy - cam.y) % 40) + 40) % 40 - 8) * TILE;
+        var crad = 150 + ci * 55;
+        var cg = ctx.createRadialGradient(csx, csy, crad * 0.3, csx, csy, crad);
+        cg.addColorStop(0, 'rgba(10,15,40,0.10)');
+        cg.addColorStop(1, 'rgba(10,15,40,0)');
+        ctx.fillStyle = cg;
+        ctx.fillRect(csx - crad, csy - crad, crad * 2, crad * 2);
+      }
+    }
+
     var drawables = [];
+    var frame = ENGINE.getFrame();
+    var DD = TERRAIN.DOODAD;
 
     // Environment doodads in the visible window (+1 ring so tall
     // sprites just below the viewport still poke into view).
@@ -379,12 +400,23 @@ var WORLD = (function() {
         case 'doodad': {
           var dsx = Math.round(offsetX + (d.wx - cam.x) * TILE);
           var dsy = Math.round(offsetY + (d.wy - cam.y) * TILE);
-          ENGINE.drawDoodad(d.dd, dsx, dsy);
+          var isTree = (d.dd === DD.OAK || d.dd === DD.PINE || d.dd === DD.SNOW_PINE || d.dd === DD.DEAD_TREE);
+          if (d.dd !== DD.FLOWERS) {
+            ENGINE.drawShadow(dsx + TILE/2, dsy + TILE - 5,
+                              isTree ? 13 : 9, isTree ? 5 : 3.5,
+                              isTree ? 0.30 : 0.22);
+          }
+          // Foliage sways; rocks don't. Phase from world coords so
+          // neighbouring trees aren't in lockstep.
+          var sway = (d.dd === DD.ROCK) ? 0
+            : Math.sin(frame * 0.028 + d.wx * 1.7 + d.wy * 0.9) * 1.6;
+          ENGINE.drawDoodad(d.dd, dsx, dsy, sway);
           break;
         }
         case 'npc': {
           var sx = Math.round(offsetX + (d.ns.x - cam.x) * TILE + TILE/2);
           var sy = Math.round(offsetY + (d.ns.y - cam.y) * TILE + TILE - 2);
+          ENGINE.drawShadow(sx, sy - 1, 10, 4);
           ENGINE.drawMinifigure(sx, sy, {
             torsoColor: d.npc.color || '#9BA19D',
             legColor:   ENGINE.darken(d.npc.color || '#9BA19D', 30),
@@ -392,18 +424,20 @@ var WORLD = (function() {
             scale:      0.85,
             emotion:    'neutral'
           });
-          // NPC name tag
-          ctx.fillStyle = 'rgba(0,0,0,0.7)';
-          ctx.fillRect(sx-24, sy-50, 48, 12);
-          ENGINE.drawText(d.npc.name.substring(0,8), sx-22, sy-41, {size:6, color:'#F2CD37'});
-          // Interaction indicator
-          ENGINE.drawText('●', sx-2, sy-52, {size:8, color:'#F2CD37'});
+          // Name tag only when the player is close — keeps the scene clean
+          if (p && Math.abs(p.x - d.ns.x) + Math.abs(p.y - d.ns.y) <= 2) {
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.fillRect(sx-24, sy-50, 48, 12);
+            ENGINE.drawText(d.npc.name.substring(0,8), sx-22, sy-41, {size:6, color:'#F2CD37'});
+            ENGINE.drawText('●', sx-2, sy-52, {size:8, color:'#F2CD37'});
+          }
           break;
         }
         case 'enemy': {
           var def = DATA.ENEMIES[d.enemy.type];
           var ex = Math.round(offsetX + (d.enemy.x - cam.x) * TILE + TILE/2);
           var ey = Math.round(offsetY + (d.enemy.y - cam.y) * TILE + TILE - 2);
+          ENGINE.drawShadow(ex, ey - 1, d.enemy.isBoss ? 13 : 10, 4);
           ENGINE.drawMinifigure(ex, ey, {
             torsoColor: def.torsoColor,
             legColor:   def.legColor,
@@ -423,6 +457,7 @@ var WORLD = (function() {
         case 'player': {
           var px = Math.round(offsetX + (p.x - cam.x) * TILE + TILE/2);
           var py = Math.round(offsetY + (p.y - cam.y) * TILE + TILE - 2);
+          ENGINE.drawShadow(px, py - 1, 11, 4.5);
           ENGINE.drawMinifigure(px, py, {
             torsoColor: p.torsoColor,
             legColor:   p.legColor,
@@ -433,24 +468,46 @@ var WORLD = (function() {
             facingLeft: p.facingLeft,
             emotion:    'neutral'
           });
-          // Player marker (arrow above head)
-          ctx.fillStyle = '#F2CD37';
-          ctx.beginPath();
-          ctx.moveTo(px, py-52);
-          ctx.lineTo(px-5, py-44);
-          ctx.lineTo(px+5, py-44);
-          ctx.closePath();
-          ctx.fill();
           break;
         }
       }
     });
+
+    // Ambient light motes (pollen / dust) drifting through the scene.
+    // Stateless: one candidate mote per 5x5-tile lattice cell, position
+    // derived from a hash of the cell + time, so they live in world space.
+    var moteCol = (zoneId && zoneId.indexOf('dungeon') >= 0) ? '200,210,230' : '255,240,170';
+    var mX0 = Math.floor(cam.x / 5) - 1, mY0 = Math.floor(cam.y / 5) - 1;
+    for (var my = mY0; my < mY0 + 7; my++) {
+      for (var mx = mX0; mx < mX0 + 8; mx++) {
+        var mh = ((Math.imul(mx, 2654435761) ^ Math.imul(my, 40503)) >>> 0) % 1000 / 1000;
+        if (mh > 0.55) continue;
+        var ph = frame * 0.012 + mh * 31;
+        var mwx = mx * 5 + 2.5 + Math.sin(ph) * 2.2 + mh * 3;
+        var mwy = my * 5 + 2.5 + Math.cos(ph * 0.8) * 1.6 - (frame * 0.004 + mh * 5) % 5;
+        var msx = offsetX + (mwx - cam.x) * TILE;
+        var msy = offsetY + (mwy - cam.y) * TILE;
+        if (msx < offsetX || msx > offsetX + VIEW_W || msy < offsetY || msy > offsetY + VIEW_H) continue;
+        var tw = 0.35 + 0.3 * Math.sin(ph * 2.3);
+        ctx.fillStyle = 'rgba(' + moteCol + ',' + tw.toFixed(2) + ')';
+        ctx.beginPath();
+        ctx.arc(msx, msy, 1.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(' + moteCol + ',' + (tw * 0.25).toFixed(2) + ')';
+        ctx.beginPath();
+        ctx.arc(msx, msy, 3.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
 
     // Ambient environment tint over the whole scene (incl. doodads)
     if (zoneEnv && zoneEnv.ambient) {
       ctx.fillStyle = zoneEnv.ambient;
       ctx.fillRect(offsetX, offsetY, VIEW_W, VIEW_H);
     }
+
+    // HD-2D lighting + tilt-shift depth blur over the finished scene
+    ENGINE.postProcess(offsetX, offsetY, VIEW_W, VIEW_H);
   }
 
   function setCallbacks(combatCb, dialogCb, zoneCb) {

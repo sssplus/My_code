@@ -217,31 +217,47 @@ PAINTERS = [
 D_W, D_H = 16, 24  # logical doodad size
 
 def dd_oak(x, y):
-    # trunk
-    if 7 <= x <= 8 and 16 <= y <= 23:
-        return (96, 62, 32) if x == 7 else (74, 46, 22)
-    # canopy: big blob
+    # trunk with side shading and root flare
+    if 16 <= y <= 23:
+        if 7 <= x <= 8:
+            return (104, 68, 36) if x == 7 else (72, 44, 22)
+        if y >= 22 and 6 <= x <= 9:
+            return (88, 56, 28) if x <= 7 else (64, 40, 20)
+    # canopy: big blob, four shade levels lit from the upper-left
     cx, cy = 7.5, 9
-    d2 = (x - cx) ** 2 + ((y - cy) * 1.15) ** 2
-    if d2 <= 52:
-        if d2 >= 40:
-            return (24, 86, 44)
-        # dappled light upper-left
-        if (x + y) % 4 == 0 and x < 9 and y < 10:
-            return (74, 168, 92)
-        return (44, 128, 64)
+    d2 = (x - cx) ** 2 + ((y - cy) * 1.12) ** 2
+    if d2 <= 55:
+        l2 = (x - 5.0) ** 2 + ((y - 6.0) * 1.1) ** 2
+        if d2 >= 44:
+            # dark rim, but a lit rim on the sun side
+            return (88, 176, 96) if (x < 6 and y < 9) else (18, 72, 38)
+        if l2 <= 6:
+            return (110, 196, 110)
+        if l2 <= 20 and (x + y) % 3 != 0:
+            return (72, 160, 86)
+        if y > 11 or l2 > 38:
+            return (30, 96, 50)
+        return (46, 130, 64)
     return None
 
 def dd_pine(x, y):
     if 7 <= x <= 8 and 19 <= y <= 23:
-        return (90, 58, 30)
-    # three triangle layers
+        return (94, 60, 32) if x == 7 else (68, 42, 22)
+    # three triangle layers, lit from the left
     for (ty, h, hw) in ((2, 7, 4), (7, 7, 5), (12, 8, 6)):
         if ty <= y < ty + h:
             w = hw * (y - ty + 1) / h
-            if abs(x - 7.5) <= w:
-                edge = abs(x - 7.5) >= w - 0.9
-                return (16, 74, 46) if edge else (30, 104, 60)
+            dx = x - 7.5
+            if abs(dx) <= w:
+                if abs(dx) >= w - 0.9:
+                    return (14, 66, 40)
+                if dx < -w * 0.25:
+                    return (52, 134, 76)
+                if dx > w * 0.35:
+                    return (22, 86, 50)
+                if y == ty + h - 1:
+                    return (18, 76, 44)
+                return (32, 108, 62)
     return None
 
 def dd_bush(x, y):
@@ -249,10 +265,15 @@ def dd_bush(x, y):
     d2 = (x - cx) ** 2 + ((y - cy) * 1.6) ** 2
     if d2 <= 30:
         if d2 >= 22:
-            return (26, 92, 48)
+            return (60, 150, 80) if (x < 6 and y < 19) else (24, 86, 44)
+        l2 = (x - 5.5) ** 2 + ((y - 17.5) * 1.6) ** 2
+        if l2 <= 4:
+            return (96, 184, 102)
         if (x * 3 + y * 5) % 7 == 0:
-            return (88, 172, 96)
-        return (46, 132, 66)
+            return (80, 164, 90)
+        if y >= 20:
+            return (34, 104, 54)
+        return (48, 134, 68)
     return None
 
 def dd_flowers(x, y):

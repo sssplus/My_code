@@ -121,15 +121,16 @@ var TERRAIN = (function() {
     var h = hash2(x * 3 + 17, y * 3 - 29);
     switch (tileId) {
       case T.FOREST:
-        if (h < 0.50) return (h < 0.30) ? DOODAD.OAK : DOODAD.PINE;
-        if (h < 0.58) return DOODAD.BUSH;
+        if (h < 0.55) return (h < 0.33) ? DOODAD.OAK : DOODAD.PINE;
+        if (h < 0.64) return DOODAD.BUSH;
+        if (h < 0.68) return DOODAD.FLOWERS;
         return -1;
       case T.GRASS:
         if (nearEntrance(x, y)) return (h < 0.06) ? DOODAD.FLOWERS : -1;
-        if (h < 0.030) return DOODAD.OAK;
-        if (h < 0.055) return DOODAD.BUSH;
-        if (h < 0.085) return DOODAD.FLOWERS;
-        if (h < 0.100) return DOODAD.ROCK;
+        if (h < 0.045) return DOODAD.OAK;
+        if (h < 0.075) return DOODAD.BUSH;
+        if (h < 0.110) return DOODAD.FLOWERS;
+        if (h < 0.125) return DOODAD.ROCK;
         return -1;
       case T.SWAMP:
         if (h < 0.10) return DOODAD.DEAD_TREE;
