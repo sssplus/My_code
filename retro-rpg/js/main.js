@@ -300,6 +300,12 @@ var GAME = (function() {
           UI.showPoliticalEvent(event, function(evId, choiceIdx) {
             SYSTEMS.POLITICS.resolveEventChoice(evId, choiceIdx);
             UI.showNotification('Political decision made!', '#81007B');
+            // Siege event: spawn the visual army confrontation on the overworld
+            if (evId === 'castle_siege' && WORLD.getCurrentZoneId() === 'world') {
+              var p2 = PLAYER.get();
+              WORLD.clearArmies();
+              WORLD.triggerSiege(p2 ? (p2.kingdom || 'player') : 'player');
+            }
           });
           transition(STATE.POL_EVENT);
         }

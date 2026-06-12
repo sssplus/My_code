@@ -12,6 +12,113 @@ var WORLD = (function() {
   var onDialog     = null;  // callback(dialogId)
   var onZoneChange = null;  // callback(newZoneId, tx, ty)
 
+  // ── Army system ───────────────────────────────────────────────
+  // Each army entity: { x, y, tx, ty, faction, size, state, allyOf }
+  var armies = [];
+
+  function spawnArmy(x, y, tx, ty, faction, size, allyOf) {
+    armies.push({ x:x, y:y, tx:tx, ty:ty, faction:faction, size:size,
+                  state:'march', allyOf:allyOf||null, fightTimer:0 });
+  }
+
+  function clearArmies() { armies = []; }
+
+  // Trigger a castle-siege scenario visually: enemy army marches on the
+  // player's current world position; player's own forces form up in defence;
+  // allied armies arrive from their kingdom coords if treaties are active.
+  function triggerSiege(playerFaction) {
+    var p = PLAYER.get();
+    if (!p) return;
+    var px = p.x, py = p.y;
+    var AF = DATA.ARMIES.factions;
+
+    // Player garrison — forms up south of the player's position
+    var pSize = p.armySize || 500;
+    spawnArmy(px, py + 3, px, py + 1, playerFaction || 'player', pSize);
+
+    // Enemy force — approaches from the north-east
+    var eSize = Math.floor(pSize * (0.8 + Math.random() * 0.8));
+    spawnArmy(px + 18, py - 12, px + 1, py - 1, 'enemy', eSize);
+
+    // Allied reinforcements if the player has treaties
+    var treaties = p.treaties || [];
+    var allyOffsets = [[-20, 8], [22, 16]];
+    treaties.forEach(function(t, i) {
+      if (AF[t] && allyOffsets[i]) {
+        var off = allyOffsets[i];
+        spawnArmy(px + off[0], py + off[1], px - 2, py + 2, t, Math.floor(pSize * 0.5), playerFaction);
+      }
+    });
+  }
+
+  function updateArmies() {
+    var speed = DATA.ARMIES.MARCH_SPEED;
+    armies.forEach(function(a) {
+      if (a.state === 'march') {
+        var dx = a.tx - a.x, dy = a.ty - a.y;
+        var dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < 0.5) {
+          a.x = a.tx; a.y = a.ty;
+          a.state = 'fight';
+        } else {
+          a.x += (dx/dist) * speed;
+          a.y += (dy/dist) * speed;
+        }
+      } else if (a.state === 'fight') {
+        a.fightTimer++;
+      }
+    });
+  }
+
+  function drawArmyFormation(a, offsetX, offsetY) {
+    var cam = ENGINE.getCamera();
+    var fd = DATA.ARMIES.formations;
+    var form = a.size > 2000 ? fd.large : (a.size > 500 ? fd.medium : fd.small);
+    var cols = form.cols, rows = form.rows;
+    var fact = DATA.ARMIES.factions[a.faction] || DATA.ARMIES.factions.enemy;
+    var sc = 0.52;
+    var spacing = Math.round(TILE * 0.72);
+
+    var baseX = Math.round(offsetX + (a.x - cam.x) * TILE);
+    var baseY = Math.round(offsetY + (a.y - cam.y) * TILE);
+
+    // Banner pole at the front centre
+    var bannerX = baseX + Math.floor(cols/2) * spacing;
+    var bannerY = baseY - rows * spacing - 18;
+    var ctx = ENGINE.getCtx();
+    ctx.fillStyle = '#8B6914';
+    ctx.fillRect(bannerX - 1, bannerY, 2, 28);
+    ctx.fillStyle = fact.banner;
+    ctx.fillRect(bannerX, bannerY, 12, 8);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillRect(bannerX+1, bannerY+8, 11, 2);
+
+    // Fight animation: shake offset on fight frames
+    var shakeX = (a.state === 'fight' && a.fightTimer % 8 < 4) ? (a.fightTimer%2===0?2:-2) : 0;
+
+    for (var row = 0; row < rows; row++) {
+      for (var col = 0; col < cols; col++) {
+        var fx = baseX + col * spacing + shakeX;
+        var fy = baseY + row * spacing;
+        ENGINE.drawShadow(fx, fy - 1, 7, 2.8, 0.22);
+        ENGINE.drawMinifigure(fx, fy, {
+          torsoColor: fact.torsoColor,
+          legColor:   fact.legColor,
+          headColor:  fact.headColor,
+          scale:      sc,
+          facingLeft: (a.faction === 'enemy'),
+          weapon:     'sword',
+          emotion:    a.state === 'fight' ? 'stern' : 'neutral'
+        });
+      }
+    }
+
+    // Size label above banner
+    var sizeStr = a.size >= 1000 ? (a.size/1000).toFixed(1)+'k' : String(a.size);
+    ENGINE.drawText(fact.name + ' (' + sizeStr + ')', bannerX + 6, bannerY - 6,
+                    { size:6, color: fact.banner, align:'center' });
+  }
+
   var TILE = 32;
   var VIEW_W = 800;
   var VIEW_H = 480;  // world view area
@@ -304,6 +411,7 @@ var WORLD = (function() {
   function update() {
     updateNpcs();
     updateEnemies();
+    if (zoneId === 'world') updateArmies();
   }
 
   // ── Render ─────────────────────────────────────────────────
@@ -354,6 +462,12 @@ var WORLD = (function() {
         ctx.fillStyle = cg;
         ctx.fillRect(csx - crad, csy - crad, crad * 2, crad * 2);
       }
+    }
+
+    // Army formations — rendered under the sprite pass so entities
+    // that walk in front of the armies correctly occlude them.
+    if (zoneId === 'world' && armies.length) {
+      armies.forEach(function(a) { drawArmyFormation(a, offsetX, offsetY); });
     }
 
     var drawables = [];
@@ -506,8 +620,9 @@ var WORLD = (function() {
       ctx.fillRect(offsetX, offsetY, VIEW_W, VIEW_H);
     }
 
-    // HD-2D lighting + tilt-shift depth blur over the finished scene
-    ENGINE.postProcess(offsetX, offsetY, VIEW_W, VIEW_H);
+    // HD-2D lighting + tilt-shift depth blur — only on open world where
+    // the long draw distance justifies the depth-of-field cost.
+    if (currentZone.procedural) ENGINE.postProcess(offsetX, offsetY, VIEW_W, VIEW_H);
   }
 
   function setCallbacks(combatCb, dialogCb, zoneCb) {
@@ -523,6 +638,7 @@ var WORLD = (function() {
     movePlayer, interactFacing,
     update, render,
     setCallbacks, getZoneEnemies,
+    triggerSiege, clearArmies, spawnArmy,
     VIEW_W, VIEW_H
   };
 })();

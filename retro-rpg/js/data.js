@@ -21,7 +21,7 @@ var DATA = {
       culture: 'Honorable warriors', capital: 'Ironhold',
       color: '#C91A09', accentColor: '#F2CD37',
       description: 'Honorable Sword Clans rule the highland realm. Duty and blade are law.',
-      startPos: { x: 8, y: 6 }, mapZone: 'ironhold'
+      startPos: { x: 5, y: 9 }, mapZone: 'ironhold'
     },
     sylvara: {
       id: 'sylvara', name: 'Sylvara', biome: 'Mystical ancient forests',
@@ -284,7 +284,7 @@ var DATA = {
   TILE: {
     VOID:0, GRASS:1, PATH:2, FOREST:3, MOUNTAIN:4, DESERT:5,
     WATER:6, WALL:7, FLOOR:8, DOOR:9, DG_FLOOR:10, DG_WALL:11,
-    SWAMP:12, SNOW:13
+    SWAMP:12, SNOW:13, MARKET:14, CROP:15
   },
 
   TILE_COLORS: {
@@ -301,10 +301,12 @@ var DATA = {
     10:['#3D3D3D','#2E2E2E'],   // dungeon floor
     11:['#1B2A34','#131E26'],   // dungeon wall
     12:['#3D5C1A','#304A14'],   // swamp
-    13:['#DDEEFF','#C8DFFF']    // snow
+    13:['#DDEEFF','#C8DFFF'],   // snow
+    14:['#C8A878','#A08858'],   // market cobblestone
+    15:['#4A7A28','#386020']    // crop/farm field
   },
 
-  WALKABLE: new Set([1,2,3,5,8,9,10,12,13]),
+  WALKABLE: new Set([1,2,3,5,8,9,10,12,13,14,15]),
 
   // ── Environment Configuration ───────────────────────────────
   // Global defaults for the world; zones override via their `env` block:
@@ -402,29 +404,71 @@ var DATA = {
   // ── Zone Maps ────────────────────────────────────────────────
   ZONES: {
     ironhold: {
-      name:'Ironhold', kingdom:'valdris', width:16, height:12,
+      name:'Ironhold', kingdom:'valdris', width:28, height:22,
       music:'highland', bgColor:'#C91A09',
       env: { encounterChance:0 },
+      startPos: { x:5, y:9 },
       tiles: [
-        [7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7],
-        [7,8,8,8,8,8,8,8,8,8,8,8,8,8,8,7],
-        [7,8,7,7,8,8,8,8,8,7,7,8,8,8,8,7],
-        [7,8,7,8,8,8,2,2,8,7,8,8,8,8,8,7],
-        [7,8,7,8,8,2,2,2,2,8,8,8,8,7,8,7],
-        [7,8,8,8,2,2,8,8,2,2,8,8,8,8,8,7],
-        [7,8,8,2,2,8,8,8,8,2,2,8,8,8,8,7],
-        [7,8,8,8,8,8,8,8,8,8,8,8,8,8,8,7],
-        [7,8,7,7,8,8,8,8,8,7,7,8,8,8,8,7],
-        [7,8,8,8,8,8,8,8,8,8,8,8,8,8,8,7],
-        [7,8,8,8,8,8,9,8,8,8,8,8,8,8,8,7],
-        [7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7]
+        // Row 0: outer north wall
+        [7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7],
+        // Row 1: castle interior (0-11) + road/grass (12-20) + inn (21-27)
+        [7,8,8,8,8,8,8,8,8,8,8,7,1,1,2,2,2,2,2,1,1,7,8,8,8,8,7,7],
+        // Row 2: throne room
+        [7,8,8,8,8,8,8,8,8,8,8,7,1,1,2,2,2,2,2,1,1,7,8,8,8,8,7,7],
+        // Row 3: castle columns
+        [7,8,8,7,7,8,8,8,7,7,8,7,1,1,2,2,2,2,2,1,1,7,8,8,8,8,7,7],
+        // Row 4: great hall + columns
+        [7,8,7,7,8,8,8,8,8,7,7,7,1,1,2,2,2,2,2,1,1,7,8,8,8,8,7,7],
+        // Row 5: castle interior + inn door col 25
+        [7,8,8,8,8,8,8,8,8,8,8,7,1,1,2,2,2,2,2,1,1,7,8,8,8,9,7,7],
+        // Row 6: lower castle + inn south wall
+        [7,8,8,8,8,8,8,8,8,8,8,7,1,1,2,2,2,2,2,1,1,7,7,7,7,7,7,7],
+        // Row 7: castle lower floor + east road (12-26)
+        [7,8,8,8,8,8,8,8,8,8,8,7,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,7],
+        // Row 8: castle south gate (door col 5) + east road
+        [7,7,7,7,7,9,7,7,7,7,7,7,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,7],
+        // Row 9: main E-W road
+        [7,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,7],
+        // Row 10: market square top + east road
+        [7,2,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,2,2,2,2,2,2,2,2,2,2,7],
+        // Row 11: market + east guild hall (18-26)
+        [7,2,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,2,7,8,8,8,8,8,8,7,7,7],
+        // Row 12: market center
+        [7,2,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,2,7,8,8,8,8,8,8,7,7,7],
+        // Row 13: market + guild hall door col 18
+        [7,2,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,2,9,8,8,8,8,8,8,7,7,7],
+        // Row 14: market bottom + guild hall south wall
+        [7,2,14,14,14,14,14,14,14,14,14,14,14,14,14,14,14,2,7,7,7,7,7,7,7,7,7,7],
+        // Row 15: south E-W road
+        [7,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,7],
+        // Row 16: farm (cols 2-7) + grass + path col 10
+        [7,1,15,15,15,15,15,15,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,7],
+        // Row 17: farm
+        [7,1,15,15,15,15,15,15,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,7],
+        // Row 18: farm wider (cols 2-8)
+        [7,1,15,15,15,15,15,15,15,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,7],
+        // Row 19: farm
+        [7,1,15,15,15,15,15,15,15,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,7],
+        // Row 20: open area
+        [7,1,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,7],
+        // Row 21: south outer wall, exit door col 10
+        [7,7,7,7,7,7,7,7,7,7,9,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7]
       ],
       npcs: [
-        { id:'guard_1',  name:'Palace Guard',  x:3, y:3, color:'#C91A09', dialog:'guard_dialog' },
-        { id:'merchant', name:'Bram the Merchant', x:11, y:7, color:'#9BA19D', dialog:'merchant_dialog', isShop:true },
-        { id:'elder',    name:'Clan Elder Varos', x:7, y:2, color:'#DBA000', dialog:'elder_varos_dialog' }
+        { id:'guard_gate',    name:'Castle Guard',        x:5,  y:9,  color:'#C91A09', dialog:'guard_dialog' },
+        { id:'guard_west',    name:'Gate Warden',         x:2,  y:9,  color:'#C91A09', dialog:'guard_dialog' },
+        { id:'guard_throne',  name:'Palace Guard',        x:2,  y:2,  color:'#C91A09', dialog:'guard_dialog' },
+        { id:'elder_varos',   name:'Elder Varos',         x:5,  y:3,  color:'#DBA000', dialog:'elder_varos_dialog' },
+        { id:'blacksmith',    name:'Harwick the Smith',   x:2,  y:13, color:'#4A3728', headColor:'#D09060', dialog:'blacksmith_dialog', isShop:true },
+        { id:'merchant',      name:'Bram the Merchant',   x:8,  y:12, color:'#9BA19D', dialog:'merchant_dialog', isShop:true },
+        { id:'cloth_merch',   name:'Tessa Threadbare',    x:13, y:11, color:'#A855A0', headColor:'#F2CD37', dialog:'cloth_merchant_dialog', isShop:true },
+        { id:'innkeeper',     name:'Rodric Inn-Keep',     x:23, y:3,  color:'#8B4513', headColor:'#E4CD9E', dialog:'innkeeper_dialog' },
+        { id:'guild_captain', name:'Captain Brennan',     x:20, y:12, color:'#4A7A28', dialog:'guard_dialog' },
+        { id:'farmer1',       name:'Aldra the Farmer',    x:3,  y:17, color:'#8B6914', headColor:'#E4CD9E', dialog:'farmer_dialog' },
+        { id:'farmer2',       name:'Pete the Farmer',     x:5,  y:19, color:'#6B5A14', headColor:'#E4CD9E', dialog:'farmer_dialog' },
+        { id:'farmer3',       name:'Mira the Farmer',     x:4,  y:18, color:'#7A6020', headColor:'#F2CD37', dialog:'farmer_dialog' }
       ],
-      exits: [{ x:6, y:10, targetZone:'world', targetX:0, targetY:2 }]
+      exits: [{ x:10, y:20, targetZone:'world', targetX:0, targetY:2 }]
     },
     moonsong: {
       name:'Moonsong', kingdom:'sylvara', width:16, height:12,
@@ -790,6 +834,55 @@ var DATA = {
                action:'romance_meet', lead:'avira' }
       }
     },
+    blacksmith_dialog: {
+      start:'bs1',
+      nodes: {
+        bs1: { speaker:'Harwick', text:"Three sword orders this week. Double the usual. Something's stirring beyond the border.\n\nNeed a blade? I've got steel and time.", emotion:'gruff',
+               choices:[
+                { text:'Show me your wares.', next:'bs_shop', action:'open_shop' },
+                { text:'What kind of stirring?', next:'bs2' }
+               ]},
+        bs2: { speaker:'Harwick', text:"Scouts came back short two men. The ones who made it back wouldn't say what they saw out east.\n\nThe Elder knows. He's just not telling the rest of us yet.", emotion:'worried',
+               choices:[{ text:"Show me your wares.", next:'bs_shop', action:'open_shop' }]},
+        bs_shop: { speaker:'Harwick', text:"Fair coin, clean steel. That's all I ask.", emotion:'neutral', choices:null, action:'open_shop' }
+      }
+    },
+    cloth_merchant_dialog: {
+      start:'cm1',
+      nodes: {
+        cm1: { speaker:'Tessa', text:"Silk from the south, wool from the highlands, linen from the river towns — and none of it cheap, because nothing is cheap anymore.\n\nBrowse?", emotion:'bright',
+               choices:[
+                { text:'Yes, let me see.', next:'cm_shop', action:'open_shop' },
+                { text:"Why isn't anything cheap anymore?", next:'cm2' }
+               ]},
+        cm2: { speaker:'Tessa', text:"Tariffs, mostly. Lord Veth closed two trade roads last month. Everything that used to come overland now pays triple to come around the coast.\n\nAnd the wool farmers are hoarding. Bad winter coming, they say.\n\nI say they say that every year.", emotion:'dry', choices:null },
+        cm_shop: { speaker:'Tessa', text:"Take your time. The good fabric is in the back.", emotion:'neutral', choices:null, action:'open_shop' }
+      }
+    },
+    innkeeper_dialog: {
+      start:'ri1',
+      nodes: {
+        ri1: { speaker:'Rodric', text:"Rooms are nine copper a night, meals included. We've got lamb stew tonight — real lamb, not 'lamb'.\n\nYou look like someone who's been on the road too long.", emotion:'warm',
+               choices:[
+                { text:"I'll take a room.", next:'ri2' },
+                { text:'What news have travelers brought?', next:'ri3' }
+               ]},
+        ri2: { speaker:'Rodric', text:"Good. Room three, end of the hall. Key's on the hook. Dinner's at the sixth bell.\n\nDon't mind the soldier downstairs — he's waiting for orders. Been waiting three days. Buy him a drink, he gets very talkative.", emotion:'conspiratorial', choices:null },
+        ri3: { speaker:'Rodric', text:"Merchant from the east said there were lights in the Ashwood again. Hunter from the north said the wolves are moving south earlier than usual.\n\nTraveling priest said the Heartstone relics are waking up.\n\nI said that's three omens for the price of a stew, and offered him a discount.", emotion:'wry', choices:null }
+      }
+    },
+    farmer_dialog: {
+      start:'fa1',
+      nodes: {
+        fa1: { speaker:'Farmer', text:"Grain's late this season. Too much rain in spring, not enough in summer.\n\nStill — not complaining. Could be worse. Could be east of here.", emotion:'tired',
+               choices:[
+                { text:'What happened east of here?', next:'fa2' },
+                { text:'Can I help?', next:'fa3' }
+               ]},
+        fa2: { speaker:'Farmer', text:"Don't rightly know. But the merchant caravans stopped coming through that way three weeks back. Road's still open, far as anyone can tell.\n\nSomething's just... wrong out there.", emotion:'uneasy', choices:null },
+        fa3: { speaker:'Farmer', text:"(a pause)\nYou're not the type who shovels grain.\n\nBut if you ever clear out whatever's making the wolves bold out east, that'd help more than you know.", emotion:'grateful', choices:null }
+      }
+    },
     desert_merchant_dialog: {
       start:'dm1',
       nodes: {
@@ -831,6 +924,27 @@ var DATA = {
   },
 
   // ── Political Events ─────────────────────────────────────────
+  // ── Army Factions ────────────────────────────────────────────
+  // Visual data for army formations rendered on the overworld.
+  ARMIES: {
+    factions: {
+      player:   { torsoColor:'#C91A09', legColor:'#1B2A34', headColor:'#F2CD37', banner:'#FFD700', name:'Your Army' },
+      valdris:  { torsoColor:'#C91A09', legColor:'#1B2A34', headColor:'#F2CD37', banner:'#C91A09', name:'Valdris Guard' },
+      sylvara:  { torsoColor:'#237841', legColor:'#1B3020', headColor:'#90E0A0', banner:'#237841', name:'Sylvara Wardens' },
+      solheim:  { torsoColor:'#F2CD37', legColor:'#8B4513', headColor:'#F2CD37', banner:'#DBA000', name:'Solheim Faithful' },
+      drakmoor: { torsoColor:'#3D5C1A', legColor:'#1A2A0A', headColor:'#9BA19D', banner:'#3D5C1A', name:'Moor Legion' },
+      veranthos:{ torsoColor:'#DBA000', legColor:'#582A12', headColor:'#E4CD9E', banner:'#DBA000', name:'Dune Riders' },
+      enemy:    { torsoColor:'#2C2C2C', legColor:'#1A0A0A', headColor:'#C8A87E', banner:'#8B0000', name:'Enemy Forces' }
+    },
+    MARCH_SPEED: 0.012,  // tiles/frame toward target
+    // Grid shape of the rendered formation (cols × rows of minifigures)
+    formations: {
+      small:  { cols:3, rows:2 },  // < 500
+      medium: { cols:5, rows:3 },  // 500-2000
+      large:  { cols:7, rows:4 }   // > 2000
+    }
+  },
+
   POLITICAL_EVENTS: [
     {
       id:'harvest_failed', title:'The Harvest Failed',
@@ -841,6 +955,17 @@ var DATA = {
         { text:'Open trade with Veranthos',        effects:{ foreignRel:{veranthos:+10, drakmoor:-5}, popularFavor:+20, goldDelayed:+500 }, desc:'Diplomatic solution.' },
         { text:'Do nothing',                       effects:{ popularFavor:-20, armyMorale:-15, revoltChance:0.1 }, desc:'Cheapest. Most dangerous.' },
         { text:'Tax the northern lords',           effects:{ gold:+600, councilTrust:-20, lordHostile:'lord_veth' }, desc:'Gold now, enemies later.' }
+      ]
+    },
+    {
+      id:'castle_siege', title:'Enemy Forces at the Gates',
+      desc:"A rival lord's army has crossed the border. They march on the capital. Your garrison must hold.",
+      availableFor:['noble','prince'],
+      options:[
+        { text:'Defend the walls — hold position',     effects:{ armyMorale:+10, gold:-300, siegeResult:'defend' },  desc:'Disciplined. Costly supplies.' },
+        { text:'Sally forth — charge the enemy line',  effects:{ armyMorale:+20, armySize:-200, siegeResult:'charge' }, desc:'High risk, crushes morale if it works.' },
+        { text:'Send for allied reinforcements',       effects:{ foreignRel:{sylvara:+15}, delayTurns:2, siegeResult:'ally' }, desc:'Costs time, but allies share the burden.' },
+        { text:'Offer terms — negotiate peace',        effects:{ popularFavor:-10, gold:-500, siegeResult:'peace' }, desc:'Ends it cheapest. Lords will call you weak.' }
       ]
     },
     {

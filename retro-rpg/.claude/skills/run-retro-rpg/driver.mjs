@@ -140,8 +140,8 @@ async function smoke() {
   await newGame(page);
   console.log('in town:', JSON.stringify(await pos(page)));
   await shot(page, 'smoke-2-town');
-  // walk out the Ironhold door at (6,10) — exercises the real zone exit
-  const p = await walkTo(page, 6, 10);
+  // walk out the Ironhold south gate at (10,20) — exercises the real zone exit
+  const p = await walkTo(page, 10, 20, 90);
   await sleep(700);
   const out = await pos(page);
   console.log('after door:', JSON.stringify(out));

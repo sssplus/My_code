@@ -112,7 +112,10 @@ var TERRAIN = (function() {
 
   // ── Doodads (environment decorations) ──────────────────────
   // Indices into assets/doodads.png; must match the generator order.
-  var DOODAD = { OAK:0, PINE:1, BUSH:2, FLOWERS:3, ROCK:4, DEAD_TREE:5, SNOW_PINE:6 };
+  var DOODAD = {
+    OAK:0, PINE:1, BUSH:2, FLOWERS:3, ROCK:4, DEAD_TREE:5, SNOW_PINE:6,
+    MARKET_STALL:7, WELL:8, BARREL:9, HAY_BALE:10
+  };
 
   // Deterministic decoration for a tile, or -1 for none. Works for any
   // map (overworld or town): same coords + tile type → same doodad.
@@ -131,6 +134,17 @@ var TERRAIN = (function() {
         if (h < 0.075) return DOODAD.BUSH;
         if (h < 0.110) return DOODAD.FLOWERS;
         if (h < 0.125) return DOODAD.ROCK;
+        return -1;
+      case T.MARKET:
+        // Sparse market dressing: stalls, barrels, well
+        if (h < 0.055) return DOODAD.MARKET_STALL;
+        if (h < 0.085) return DOODAD.BARREL;
+        if (h < 0.092) return DOODAD.WELL;
+        return -1;
+      case T.CROP:
+        // Farmland: hay bales and barrels for harvest variety
+        if (h < 0.060) return DOODAD.HAY_BALE;
+        if (h < 0.078) return DOODAD.BARREL;
         return -1;
       case T.SWAMP:
         if (h < 0.10) return DOODAD.DEAD_TREE;

@@ -19,7 +19,7 @@ var ENGINE = (function() {
   // ── Pixel-art tileset ──────────────────────────────────────
   var tilesetImg   = null;
   var tilesetReady = false;
-  var TILE_COUNT   = 14;   // ids 0..13 present in assets/tileset.png
+  var TILE_COUNT   = 16;   // ids 0..15 present in assets/tileset.png
 
   // ── Doodad sprites (trees, bushes...) ──────────────────────
   // 32x48 cells anchored at the bottom; ids match TERRAIN.DOODAD.
@@ -540,6 +540,40 @@ var ENGINE = (function() {
         ctx.beginPath();
         ctx.arc(x+8, y+h-6, 3, 0, Math.PI*2);
         ctx.fill();
+        break;
+      case DATA.TILE.MARKET:
+        // Warm sandstone cobblestone — market plaza
+        ctx.fillStyle = c0;
+        ctx.fillRect(x, y, w, h);
+        // Alternating stone blocks in a 2×2 chequerboard
+        if ((Math.floor(x/w) + Math.floor(y/h)) % 2 === 0) {
+          ctx.fillStyle = 'rgba(255,255,220,0.07)';
+          ctx.fillRect(x+1, y+1, w-2, h-2);
+        }
+        // Grout lines
+        ctx.strokeStyle = c1;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x+0.5, y+0.5, w-1, h-1);
+        // Inner bevel on lit side
+        ctx.fillStyle = 'rgba(255,255,200,0.12)';
+        ctx.fillRect(x+1, y+1, w-2, 2);
+        ctx.fillRect(x+1, y+1, 2, h-2);
+        break;
+      case DATA.TILE.CROP:
+        // Tilled earth with crop rows
+        ctx.fillStyle = c0;
+        ctx.fillRect(x, y, w, h);
+        for (var cr = 0; cr < h; cr += 5) {
+          var even = (Math.floor((y + cr) / 5) % 2 === 0);
+          ctx.fillStyle = even ? 'rgba(0,0,0,0.20)' : 'rgba(255,255,255,0.07)';
+          ctx.fillRect(x, y+cr, w, Math.min(4, h-cr));
+        }
+        // Tiny crop shoots
+        ctx.fillStyle = lighten(c0, 28);
+        for (var cs = 3; cs < w-2; cs += 7) {
+          var shootY = (Math.floor((x+cs)/7) % 2 === 0) ? y+3 : y+8;
+          ctx.fillRect(x+cs, shootY, 2, 5);
+        }
         break;
       default:
         ctx.fillStyle = '#FF00FF';

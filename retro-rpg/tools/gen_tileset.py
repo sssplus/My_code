@@ -190,6 +190,49 @@ def painter_snow():
     base, light, dark = (224, 235, 250), (245, 250, 255), (198, 212, 232)
     return solid_noise(base, light, dark, 808, 0.2, 0.12)
 
+def painter_market():
+    # Warm sandstone cobblestone: 8×8 block grid with bevelled edges
+    base = (198, 165, 118)
+    light = (218, 188, 144)
+    dark  = (158, 128, 86)
+    fn = solid_noise(base, light, dark, 909, 0.10, 0.12)
+    def p(x, y):
+        # Mortar lines every 8 pixels
+        if x % 8 == 0 or y % 8 == 0:
+            return dark
+        if x % 8 == 1 or y % 8 == 1:
+            return light
+        # Checkerboard tint within each block for variety
+        bx, by = x // 8, y // 8
+        if (bx + by) % 2 == 0:
+            r, g, b = fn(x, y)
+            return (min(255, r+8), min(255, g+6), min(255, b+4))
+        return fn(x, y)
+    return p
+
+def painter_crop():
+    # Tilled earth with alternating crop rows (dark furrows / green shoots)
+    soil_dark  = (88,  60, 28)
+    soil_mid   = (108, 76, 36)
+    soil_light = (124, 88, 44)
+    shoot      = (72, 140, 48)
+    shoot_hi   = (96, 170, 60)
+    def p(x, y):
+        row = y // 5
+        within = y % 5
+        if within == 0:
+            return soil_dark           # furrow
+        if within == 1:
+            return soil_mid
+        if within == 4:
+            return soil_dark           # next furrow approach
+        # Shoot columns at x=2,9 (staggered odd/even rows)
+        sx = 2 if row % 2 == 0 else 6
+        if x % 8 == sx % 8 and within in (2, 3):
+            return shoot_hi if within == 2 else shoot
+        return soil_mid if within == 2 else soil_light
+    return p
+
 PAINTERS = [
     painter_void,        # 0
     painter_grass(),     # 1
@@ -205,6 +248,8 @@ PAINTERS = [
     painter_dg_wall(),   # 11
     painter_swamp(),     # 12
     painter_snow(),      # 13
+    painter_market(),    # 14
+    painter_crop(),      # 15
 ]
 
 # ============================================================================
@@ -319,7 +364,113 @@ def dd_snow_pine(x, y):
             return (236, 244, 252)
     return c
 
-DOODADS = [dd_oak, dd_pine, dd_bush, dd_flowers, dd_rock, dd_dead_tree, dd_snow_pine]
+def dd_market_stall(x, y):
+    # Wooden stall frame with striped canopy (red/white) and counter
+    # Canopy: y 0-6, full width
+    if y <= 6:
+        if y == 0:                          # canopy top edge / ridge
+            return (140, 30, 20)
+        stripe = (x // 3) % 2
+        if y <= 5:
+            return (210, 48, 36) if stripe == 0 else (240, 230, 220)
+        return (170, 36, 26)                # canopy lower border
+    # Wooden posts at x=1 and x=14
+    if x in (1, 14) and 0 <= y <= 21:
+        return (130, 88, 42) if y % 4 != 3 else (100, 64, 28)
+    # Counter top: y=14-15
+    if 14 <= y <= 15 and 2 <= x <= 13:
+        return (170, 116, 52) if y == 14 else (140, 94, 38)
+    # Counter front face: y=16-17
+    if 16 <= y <= 17 and 2 <= x <= 13:
+        return (110, 72, 30)
+    # Goods on counter (little coloured squares)
+    goods = {(4,13):(220,60,50),(5,13):(220,60,50),
+             (7,13):(80,180,80),(8,13):(80,180,80),
+             (10,13):(220,200,60),(11,13):(220,200,60)}
+    if (x, y) in goods:
+        return goods[(x,y)]
+    # Back wall of stall y=7-13, x=2-13
+    if 7 <= y <= 13 and 2 <= x <= 13:
+        bx = (x + y) % 6
+        return (160, 108, 48) if bx < 2 else (140, 92, 38)
+    return None
+
+def dd_well(x, y):
+    # Stone well: circular base, wooden crossbeam, rope and bucket
+    # Base ring y=16-23
+    cx = 7.5
+    if 15 <= y <= 23:
+        r = 6.5 - (y - 15) * 0.15
+        if abs(x - cx) <= r:
+            if abs(x - cx) >= r - 1.2:
+                return (128, 128, 138) if y < 20 else (100, 100, 110)
+            return (105, 105, 115)
+    # Wooden posts at x=3 and x=12, y=6-15
+    if x in (3, 12) and 6 <= y <= 15:
+        return (130, 88, 42)
+    # Crossbeam y=5-7, x=3-12
+    if 5 <= y <= 7 and 3 <= x <= 12:
+        if y == 6:
+            return (150, 104, 52)
+        return (120, 80, 36)
+    # Rope x=7-8, y=8-15
+    if x in (7, 8) and 8 <= y <= 14:
+        return (190, 160, 100) if y % 2 == 0 else (160, 130, 78)
+    # Bucket y=15-18, x=5-10
+    if 15 <= y <= 18 and 5 <= x <= 10:
+        if x in (5, 10) or y in (15, 18):
+            return (100, 72, 36)
+        return (120, 88, 44)
+    return None
+
+def dd_barrel(x, y):
+    # Wooden barrel with iron bands
+    cx = 7.5
+    if 10 <= y <= 23:
+        # Barrel profile widens toward middle (y=17), narrows at top/bottom
+        mid = 17.0
+        dist = abs(y - mid) / 7.0
+        hw = 5.5 - dist * 2.5
+        if abs(x - cx) <= hw:
+            edge = abs(x - cx) >= hw - 1.0
+            # Iron bands at y=12,17,22
+            band = y in (12, 13, 17, 18, 22, 23)
+            if band:
+                return (60, 60, 68)
+            if edge:
+                return (100, 66, 30)
+            lside = x < cx
+            return (150, 100, 48) if lside else (120, 78, 34)
+    # Lid top y=9-10
+    cx2, cy2 = 7.5, 9.5
+    d2 = (x - cx2)**2 + ((y - cy2)*2.2)**2
+    if d2 <= 28:
+        return (140, 94, 42) if d2 >= 20 else (160, 110, 52)
+    return None
+
+def dd_hay_bale(x, y):
+    # Round hay bale (cylinder viewed from side)
+    cx, cy = 7.5, 18.0
+    d2 = (x - cx)**2 + ((y - cy)*1.1)**2
+    if d2 <= 44:
+        edge = d2 >= 36
+        # Straw texture — diagonal hatch lines
+        straw = (x * 2 + y) % 5
+        if edge:
+            return (180, 130, 40)
+        if straw == 0:
+            return (220, 175, 65)
+        if straw == 2:
+            return (190, 148, 52)
+        return (205, 160, 56)
+    # Straw wisps above bale
+    wisp = {(5,8),(6,7),(8,7),(9,8),(7,6),(10,9),(4,9)}
+    if (x,y) in wisp:
+        return (220, 185, 70)
+    return None
+
+DOODADS = [dd_oak, dd_pine, dd_bush, dd_flowers, dd_rock, dd_dead_tree, dd_snow_pine,
+           dd_market_stall, dd_well, dd_barrel, dd_hay_bale]
 
 def write_sheet(path, painters, lw, lh):
     img = Image.new("RGBA", (len(painters) * lw * PX, lh * PX), (0, 0, 0, 0))
