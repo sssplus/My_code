@@ -264,9 +264,11 @@ function updateLocks() {
   const trackerLock = document.getElementById('tracker-lock');
   const minerLock = document.getElementById('miner-lock');
   const agentLock = document.getElementById('agent-lock');
+  const musicLock = document.getElementById('music-lock');
   if (trackerLock) trackerLock.style.display = noAccess ? 'flex' : 'none';
   if (minerLock) minerLock.style.display = noAccess ? 'flex' : 'none';
   if (agentLock) agentLock.style.display = noAccess ? 'flex' : 'none';
+  if (musicLock) musicLock.style.display = noAccess ? 'flex' : 'none';
 
   // Pro Upgrade button visibility in nav
   const isWorkspace = sessionStorage.getItem('pf_view_state') === 'workspace';
@@ -778,29 +780,49 @@ function renderOutputs() {
   }
 }
 
-/* ── Chat Assistant ────────────────────────────── */
-function addChatMessage(role, text) {
-  const div = document.createElement('div');
-  div.style.background = role === 'user' ? 'rgba(124,58,237,0.1)' : 'rgba(255,255,255,0.05)';
-  div.style.padding = '10px 12px';
-  div.style.borderRadius = '8px';
-  div.style.border = role === 'user' ? '1px solid rgba(124,58,237,0.3)' : '1px solid rgba(255,255,255,0.1)';
-  div.style.alignSelf = role === 'user' ? 'flex-end' : 'flex-start';
-  div.style.maxWidth = '90%';
-  const strong = document.createElement('strong');
-  strong.textContent = role === 'user' ? 'You' : 'AI';
-  div.appendChild(strong);
-  div.appendChild(document.createElement('br'));
-  div.appendChild(document.createTextNode(text));
-  els.chatHistory.appendChild(div);
+/* ── Chat Assistant (conversational, can answer + apply edits) ── */
+let chatLog = []; // [{ role:'user'|'assistant', text }]
+
+function addChatMessage(role, text, opts) {
+  const wrap = document.createElement('div');
+  wrap.className = `pf-chat-msg ${role === 'user' ? 'pf-chat-user' : 'pf-chat-ai'}`;
+  const who = document.createElement('div');
+  who.className = 'pf-chat-who';
+  who.textContent = role === 'user' ? 'You' : 'Assistant';
+  const body = document.createElement('div');
+  body.className = 'pf-chat-body';
+  body.textContent = text;
+  wrap.appendChild(who);
+  wrap.appendChild(body);
+  if (opts && opts.applied) {
+    const tag = document.createElement('div');
+    tag.className = 'pf-chat-applied';
+    tag.textContent = `✓ Applied to ${opts.applied}`;
+    wrap.appendChild(tag);
+  }
+  els.chatHistory.appendChild(wrap);
   els.chatHistory.scrollTop = els.chatHistory.scrollHeight;
+}
+
+function showChatTyping(on) {
+  let el = document.getElementById('pf-chat-typing');
+  if (on) {
+    if (el) return;
+    el = document.createElement('div');
+    el.id = 'pf-chat-typing';
+    el.className = 'pf-chat-msg pf-chat-ai';
+    el.innerHTML = '<div class="pf-chat-who">Assistant</div><div class="pf-chat-dots"><span></span><span></span><span></span></div>';
+    els.chatHistory.appendChild(el);
+    els.chatHistory.scrollTop = els.chatHistory.scrollHeight;
+  } else if (el) {
+    el.remove();
+  }
 }
 
 async function sendChatMessage() {
   const msg = els.chatInput.value.trim();
   if (!msg) return;
 
-  // Find active tab
   const activeTab = document.querySelector('.tab-btn.active');
   const format = activeTab ? activeTab.dataset.target.replace('tab-', '') : null;
 
@@ -810,24 +832,51 @@ async function sendChatMessage() {
   }
 
   addChatMessage('user', msg);
+  chatLog.push({ role: 'user', text: msg });
   els.chatInput.value = '';
   els.chatSend.disabled = true;
   els.chatSend.textContent = '...';
+  showChatTyping(true);
 
-  const sysPrompt = "You are an assistant helping the user refine a piece of content. Return ONLY the updated content text. For Twitter threads, return a JSON array of strings instead. No preamble.";
-  const userPrompt = `Current Content:\n${JSON.stringify(generatedData[format])}\n\nUser Request: ${msg}\n\nReturn the updated content.`;
+  // The assistant both replies conversationally AND, when asked to change the
+  // piece, returns the full updated content. JSON keeps the two cleanly separated.
+  const sysPrompt =
+    `You are a helpful content assistant in a podcast-repurposing app. The user is viewing their "${format}" piece. ` +
+    `Answer questions conversationally and concisely. If (and only if) the user asks you to rewrite, tweak, expand, shorten, ` +
+    `or otherwise change the piece, return the FULL updated content too. ` +
+    `Return ONLY JSON, no fences: {"reply":"your short chat reply","updated":<new content, or null if no change>}. ` +
+    `For the twitter format, "updated" must be a JSON array of tweet strings.`;
+  const history = chatLog.slice(-6).map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.text}`).join('\n');
+  const userPrompt =
+    `Current "${format}" content:\n${JSON.stringify(generatedData[format])}\n\n` +
+    `Conversation so far:\n${history}\n\nRespond to the latest user message.`;
 
   try {
-    const result = await callAI(sysPrompt, userPrompt, 'generate');
-    let clean = result;
-    if (format === 'twitter') {
-      try { clean = safeParseJSON(result); } catch (e) { /* keep raw text */ }
+    const result = await callAI(sysPrompt, userPrompt, 'chat');
+    let reply = '', updated = null;
+    try {
+      const parsed = safeParseJSON(result);
+      reply = typeof parsed.reply === 'string' ? parsed.reply : '';
+      updated = (parsed.updated === undefined ? null : parsed.updated);
+    } catch (e) {
+      reply = result; // model didn't return JSON — treat the whole thing as a reply
     }
 
-    generatedData[format] = clean;
-    renderOutputs();
-    addChatMessage('assistant', "Updated the content for you!");
+    let applied = null;
+    const hasUpdate = updated !== null && updated !== '' &&
+      !(Array.isArray(updated) && updated.length === 0);
+    if (hasUpdate) {
+      generatedData[format] = updated;
+      renderOutputs();
+      applied = format;
+    }
+
+    showChatTyping(false);
+    const finalReply = reply || (applied ? 'Updated the content for you!' : 'Done.');
+    addChatMessage('assistant', finalReply, { applied });
+    chatLog.push({ role: 'assistant', text: finalReply });
   } catch (err) {
+    showChatTyping(false);
     addChatMessage('assistant', "Sorry, there was an error: " + err.message);
   } finally {
     els.chatSend.disabled = false;

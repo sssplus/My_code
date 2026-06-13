@@ -1519,3 +1519,36 @@ footer { border-top: 1px solid var(--border); padding: 32px 40px; display: flex;
 .btn-sso.disabled, .btn-sso:disabled {
   opacity: 0.4; cursor: not-allowed; filter: grayscale(0.6);
 }
+
+/* ── Chat assistant (upgraded) ──────────────────── */
+.pf-chat-msg {
+  max-width: 92%; padding: 9px 12px; border-radius: 10px;
+  font-size: 13px; line-height: 1.5; word-break: break-word;
+  animation: fadeIn 0.2s ease;
+}
+.pf-chat-user {
+  align-self: flex-end; background: rgba(124,58,237,0.14);
+  border: 1px solid rgba(124,58,237,0.3); border-bottom-right-radius: 3px;
+}
+.pf-chat-ai {
+  align-self: flex-start; background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1); border-bottom-left-radius: 3px;
+}
+.pf-chat-who {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.4px;
+  text-transform: uppercase; color: var(--text-muted); margin-bottom: 3px;
+}
+.pf-chat-body { color: var(--text-primary); white-space: pre-wrap; }
+.pf-chat-applied {
+  margin-top: 6px; font-size: 11px; font-weight: 600; color: var(--accent-green);
+  background: rgba(16,185,129,0.1); border-radius: 5px; padding: 3px 7px; display: inline-block;
+}
+.pf-chat-dots { display: flex; gap: 4px; padding: 4px 2px; }
+.pf-chat-dots span {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted);
+  animation: pf-dot 1.2s infinite ease-in-out both;
+}
+.pf-chat-dots span:nth-child(2) { animation-delay: 0.15s; }
+.pf-chat-dots span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes pf-dot { 0%,80%,100% { opacity: 0.3; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .pf-chat-dots span { animation: none; } }

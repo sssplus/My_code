@@ -34,9 +34,9 @@ const TRIAL_DAYS = 15;
 // Per-feature daily caps for the FREE plan. trial/fixed/payg are unlimited.
 // Each unit is one AI call: the Miner makes one call per transcript section,
 // so its cap is measured in sections; Generator/Studio/Tracker are 1 call each.
-const FREE_LIMITS = { generate: 5, studio: 5, miner: 10, tracker: 2, agent: 8 };
+const FREE_LIMITS = { generate: 5, studio: 5, miner: 10, tracker: 2, agent: 8, music: 5, chat: 15 };
 const FEATURES = Object.keys(FREE_LIMITS);
-const FEATURE_LABEL = { generate: 'content generation', studio: 'Script Studio', miner: 'the Content Miner', tracker: 'the AI Stack audit', agent: 'the Auto-Repurpose agent' };
+const FEATURE_LABEL = { generate: 'content generation', studio: 'Script Studio', miner: 'the Content Miner', tracker: 'the AI Stack audit', agent: 'the Auto-Repurpose agent', music: 'the Music Brief', chat: 'the chat assistant' };
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
