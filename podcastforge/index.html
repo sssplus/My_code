@@ -25,6 +25,7 @@
       <a href="#landing-features" class="nav-landing-only">Features</a>
       <a href="#studio" class="nav-workspace-only" style="display: none;">Script Studio</a>
       <a href="#app" class="nav-workspace-only" style="display: none;">Generator</a>
+      <a href="#agent" class="nav-workspace-only" style="display: none;">Agent</a>
       <a href="#miner" class="nav-workspace-only" style="display: none;">Miner</a>
       <a href="#tools" class="nav-workspace-only" style="display: none;">AI Stack Tracker</a>
       <a href="#pricing">Pricing</a>
@@ -324,6 +325,24 @@
         </div>
       </div>
     </section>
+    <!-- Auto-Repurpose Agent Section -->
+    <section id="agent" style="max-width:1140px; margin:0 auto; padding:10px 24px;">
+      <div style="text-align:center; margin-bottom:28px;">
+        <div class="section-label" style="color:var(--accent-violet2);">One-click</div>
+        <h2 class="section-title" style="font-size:24px;">Auto-Repurpose Agent</h2>
+        <p class="section-sub" style="font-size:14px; max-width:640px; margin:0 auto;">Paste an episode and the agent plans a content pack, then writes every piece for you — blog, threads, LinkedIn, show notes and more, in one run.</p>
+      </div>
+      <div id="agent-container">
+        <div style="padding:40px; text-align:center; color:var(--text-muted); font-family:monospace;">Loading agent…</div>
+        <div id="agent-lock" class="feature-lock" style="display:none;">
+          <div class="lock-icon">🔒</div>
+          <div class="lock-title">Your trial has ended</div>
+          <div class="lock-sub">Choose a plan to keep using the agent. The Free plan includes ~1 full run/day.</div>
+          <button class="lock-cta" onclick="app.showPaywall()">Choose a plan</button>
+        </div>
+      </div>
+    </section>
+
     <!-- Long-Episode Content Miner Section (inside workspace: shown after login) -->
     <section id="miner">
       <div style="text-align:center; margin-bottom:40px;">
@@ -576,5 +595,6 @@
   <script src="tracker.js"></script>
   <script src="engine.js"></script>
   <script src="studio.js"></script>
+  <script src="agent.js"></script>
 </body>
 </html>

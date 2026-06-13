@@ -263,8 +263,10 @@ function updateLocks() {
   els.toolsLock.style.display = transcriptLocked ? 'flex' : 'none';
   const trackerLock = document.getElementById('tracker-lock');
   const minerLock = document.getElementById('miner-lock');
+  const agentLock = document.getElementById('agent-lock');
   if (trackerLock) trackerLock.style.display = noAccess ? 'flex' : 'none';
   if (minerLock) minerLock.style.display = noAccess ? 'flex' : 'none';
+  if (agentLock) agentLock.style.display = noAccess ? 'flex' : 'none';
 
   // Pro Upgrade button visibility in nav
   const isWorkspace = sessionStorage.getItem('pf_view_state') === 'workspace';
