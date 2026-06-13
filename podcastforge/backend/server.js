@@ -190,18 +190,48 @@ async function handleAI(req, res, user) {
 }
 
 async function handleCheckout(req, res, user) {
-  const { plan } = await readBody(req);
+  const body = await readBody(req);
+  const { plan } = body;
   if (!['fixed', 'payg', 'free'].includes(plan)) throw { status: 400, message: 'Unknown plan.' };
-  // Mock billing: in production verify a Razorpay signature here before upgrading.
+
+  // Downgrading to free needs no payment. Paid plans require verification
+  // whenever billing is configured, so a user cannot self-grant a paid plan.
+  const billingConfigured = !!process.env.RAZORPAY_KEY_SECRET;
+  const isPaid = plan === 'fixed' || plan === 'payg';
+
+  if (isPaid && billingConfigured) {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = body;
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      throw { status: 400, message: 'Payment verification details are required.' };
+    }
+    const expected = require('crypto')
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest('hex');
+    const a = Buffer.from(razorpay_signature);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !require('crypto').timingSafeEqual(a, b)) {
+      throw { status: 402, message: 'Payment could not be verified.' };
+    }
+  }
+
   user.plan = plan;
   store.saveUser(user);
-  sendJSON(res, 200, { ok: true, user: publicUser(user), mock: !process.env.RAZORPAY_KEY_SECRET });
+  sendJSON(res, 200, { ok: true, user: publicUser(user), mock: !billingConfigured });
 }
 
 /* ---- static file serving (path-traversal safe) ---- */
 function serveStatic(req, res) {
-  let urlPath = decodeURIComponent((req.url.split('?')[0]) || '/');
+  let urlPath;
+  try {
+    urlPath = decodeURIComponent((req.url.split('?')[0]) || '/');
+  } catch (e) {
+    // malformed percent-encoding
+    res.writeHead(400); res.end('Bad request'); return;
+  }
   if (urlPath === '/') urlPath = '/index.html';
+  // reject null bytes outright
+  if (urlPath.includes('\0')) { res.writeHead(400); res.end('Bad request'); return; }
   // Resolve and confirm the result stays inside PUBLIC_DIR
   const resolved = path.resolve(PUBLIC_DIR, '.' + urlPath);
   if (resolved !== PUBLIC_DIR && !resolved.startsWith(PUBLIC_DIR + path.sep)) {
