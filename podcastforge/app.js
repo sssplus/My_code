@@ -163,6 +163,10 @@ function initAuth() {
 }
 
 function selectPlan(plan) {
+  // Persist the plan server-side when logged in (server enforces it on every call).
+  if (window.PF && PF.isAuthed()) {
+    PF.upgrade(plan).then(() => syncBackendUser()).catch(e => showToast(e.message, 'error'));
+  }
   localStorage.setItem(STORAGE_KEYS.PLAN, plan);
   appState.plan = plan;
   els.paywall.classList.remove('show');
@@ -325,11 +329,60 @@ function detectProvider() {
   }
 }
 
+let keySaveTimer = null;
 els.apiKey.addEventListener('input', (e) => {
   appState.apiKey = e.target.value;
-  localStorage.setItem(STORAGE_KEYS.API_KEY, appState.apiKey);
   detectProvider();
+
+  if (window.PF && PF.isAuthed()) {
+    // Logged in: hand the key to the backend; don't persist plaintext in the browser.
+    localStorage.removeItem(STORAGE_KEYS.API_KEY);
+    clearTimeout(keySaveTimer);
+    const val = appState.apiKey.trim();
+    if (val.length >= 8) {
+      keySaveTimer = setTimeout(() => {
+        PF.saveKey(val)
+          .then(p => showToast(`Key saved to your account (${p}).`, 'success'))
+          .catch(err => showToast(err.message, 'error'));
+      }, 800);
+    }
+  } else {
+    localStorage.setItem(STORAGE_KEYS.API_KEY, appState.apiKey);
+  }
 });
+
+// True if a generation can proceed: a typed key, or stored backend keys.
+function hasUsableKey() {
+  if (appState.apiKey && appState.apiKey.trim()) return true;
+  if (window.PF && PF.isAuthed()) {
+    const provs = PF.session.user.providers || [];
+    return provs.length > 0;
+  }
+  return false;
+}
+
+// Mirror the backend user's plan/usage into appState + the existing UI.
+function syncBackendUser() {
+  if (!(window.PF && PF.isAuthed())) return;
+  const u = PF.session.user;
+  appState.plan = u.plan;
+  appState.daysLeft = u.daysLeft;
+  if (u.plan === 'free') {
+    // bridge into the shape updateNavState already reads
+    localStorage.setItem(STORAGE_KEYS.FREE_USAGE, JSON.stringify({
+      date: new Date().toISOString().split('T')[0], count: u.usageToday || 0
+    }));
+  }
+  if ((u.providers || []).length && appState.provider === 'none') {
+    appState.provider = u.providers[0];
+    els.badge.className = 'provider-badge active';
+    els.badge.textContent = `🔒 Key stored (${u.providers[0]})`;
+    els.badge.style.setProperty('--badge-color', '#10b981');
+    els.apiKey.placeholder = 'Key stored securely on your account — paste a new one to replace it';
+  }
+  updateNavState();
+  updateLocks();
+}
 
 /* ── The Unified AI Caller ─────────────────────────
    Per-provider model fallback chains. The first model is the
@@ -487,6 +540,13 @@ function friendlyNetworkError(provider) {
 }
 
 async function callAI(systemPrompt, userPrompt) {
+  // Backend path: the server holds the key and performs the provider fetch
+  // (server-to-server, so every provider works — including NVIDIA/OpenAI).
+  if (window.PF && PF.isAuthed()) {
+    const prov = appState.provider !== 'none' ? appState.provider : undefined;
+    return PF.callAI(systemPrompt, userPrompt, prov);
+  }
+
   const key = appState.apiKey.trim();
   if (!key) throw new Error('API key required');
 
@@ -575,9 +635,11 @@ function safeParseJSON(text) {
 }
 window.safeParseJSON = safeParseJSON;
 
-// Export for tracker
+// Export for tracker, engine, studio
 window.app = {
   callAI,
+  hasKey: hasUsableKey,   // true if a typed key OR stored backend keys are usable
+  showToast,
   showPaywall,
   selectPlan,
   initRazorpayCheckout,
@@ -603,7 +665,7 @@ async function generateContent() {
     showPaywall();
     return;
   }
-  if (!appState.apiKey) {
+  if (!hasUsableKey()) {
     showToast("Please enter an API key first.", "warn");
     els.apiKey.focus();
     return;
@@ -759,7 +821,7 @@ els.chatInput.addEventListener('keydown', (e) => {
 /* ── Transcript Tools (Inline) ───────────────────── */
 async function runTranscriptTool(type) {
   if (appState.plan === 'expired') { showPaywall(); return; }
-  if (!appState.apiKey) { showToast("API key required.", "warn"); els.apiKey.focus(); return; }
+  if (!hasUsableKey()) { showToast("API key required.", "warn"); els.apiKey.focus(); return; }
 
   const txt = els.transcript.value.trim();
   if (txt.length < 20) return;
@@ -908,16 +970,50 @@ function simulateSSO(provider) {
   }, 500);
 }
 
-function handleAuthSubmit() {
+async function handleAuthSubmit() {
   const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
   if (!email) {
     showToast("Please enter username or email", "warn");
+    return;
+  }
+
+  // Real auth when a backend is present; demo transition otherwise.
+  if (window.PF && PF.hasBackend()) {
+    if (!password) { showToast("Please enter your password", "warn"); return; }
+    try {
+      await PF.login(email, password);
+      syncBackendUser();
+      showToast("Signed in!", "success");
+      transitionToWorkspace();
+    } catch (e) {
+      showToast(e.message, "error");
+    }
     return;
   }
   transitionToWorkspace();
 }
 
-function startFreeTrialAuth() {
+async function startFreeTrialAuth() {
+  // Real account creation when a backend is present.
+  if (window.PF && PF.hasBackend()) {
+    const email = document.getElementById('auth-email').value.trim();
+    const password = document.getElementById('auth-password').value;
+    if (!email || password.length < 8) {
+      showToast("Enter an email and an 8+ character password to start your trial.", "warn");
+      return;
+    }
+    try {
+      await PF.signup(email, password);
+      syncBackendUser();
+      showToast("Trial started — account created!", "success");
+      transitionToWorkspace();
+    } catch (e) {
+      showToast(e.message, "error");
+    }
+    return;
+  }
+
   let trialStart = localStorage.getItem(STORAGE_KEYS.TRIAL_START);
   if (!trialStart) {
     trialStart = new Date().toISOString();
@@ -957,9 +1053,11 @@ function transitionToWorkspace() {
 }
 
 function signOut() {
+  if (window.PF && PF.isAuthed()) PF.logout();
   localStorage.removeItem(STORAGE_KEYS.API_KEY);
   appState.apiKey = '';
   els.apiKey.value = '';
+  els.apiKey.placeholder = 'Paste your Anthropic, Gemini, OpenRouter, or OpenAI API key here...';
   detectProvider();
 
   // Re-display landing view before transitioning back
@@ -1247,6 +1345,23 @@ document.addEventListener('click', (e) => {
     }
   }
 });
+
+// If a backend is reachable and we have a valid saved session, adopt it:
+// reflect the server's plan/usage/keys and drop the user straight into the workspace.
+if (window.PF) {
+  PF.ready.then((hasBackend) => {
+    if (hasBackend && PF.isAuthed()) {
+      syncBackendUser();
+      if (sessionStorage.getItem('pf_view_state') !== 'workspace') {
+        sessionStorage.setItem('pf_view_state', 'workspace');
+        document.body.classList.add('view-state-workspace', 'workspace-active');
+        const landingEl = document.getElementById('landing-view');
+        if (landingEl) landingEl.style.display = 'none';
+        updateNavLinks(true);
+      }
+    }
+  });
+}
 
 // Run Init
 initAuth();

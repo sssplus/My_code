@@ -42,6 +42,11 @@
     return window.app.callAI(sys, usr);
   };
 
+  // A key is usable if one is typed in the bar OR stored on the backend account.
+  const hasKey = () => (window.app && typeof window.app.hasKey === "function")
+    ? window.app.hasKey()
+    : !!localStorage.getItem("pf_api_key");
+
   /* ---- tuning ---- */
   const WORDS_PER_CHUNK = 3000;   // ~4k tokens in; comfortably under any provider limit
   const CHUNK_OVERLAP   = 120;    // words of overlap so ideas on a boundary aren't lost
@@ -130,7 +135,7 @@
     const ta = document.getElementById("miner-input");
     const text = (ta ? ta.value : "").trim();
 
-    if (!localStorage.getItem("pf_api_key")) {
+    if (!hasKey()) {
       state.error = "Enter your API key in the bar at the top of the workspace to start mining.";
       render();
       document.getElementById("api-key-input")?.focus();
@@ -269,7 +274,7 @@
   async function draft(id, format) {
     const m = state.moments.find((x) => x.id === id);
     if (!m) return;
-    if (!localStorage.getItem("pf_api_key")) {
+    if (!hasKey()) {
       document.getElementById("api-key-input")?.focus();
       return;
     }
