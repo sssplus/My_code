@@ -100,6 +100,17 @@
       if (d.user) { state.user = d.user; PF.session = { token: state.token, user: d.user }; }
       return d.user;
     },
+    async account() { return await api('/api/account'); },
+    async removeKey(provider) {
+      const d = await api('/api/keys/' + encodeURIComponent(provider), { method: 'DELETE' });
+      if (state.user) state.user.providers = d.providers;
+      return d.providers;
+    },
+    async discover(term, genre) {
+      const qs = new URLSearchParams({ term: term || '', genre: genre || '' }).toString();
+      const d = await api(`/api/discover?${qs}`);
+      return { results: d.results || [], filtered: d.filtered || 0 };
+    },
     async callAI(systemPrompt, userPrompt, provider, feature) {
       const d = await api('/api/ai', { method: 'POST', body: { systemPrompt, userPrompt, provider, feature } });
       if (state.user && d.usage) state.user.usage = d.usage;

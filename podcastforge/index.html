@@ -23,6 +23,7 @@
     <div class="nav-links" id="navbar-links">
       <a href="#landing-hero" class="nav-landing-only">Home</a>
       <a href="#landing-features" class="nav-landing-only">Features</a>
+      <a href="#discover" class="nav-workspace-only" style="display: none;">Discover</a>
       <a href="#studio" class="nav-workspace-only" style="display: none;">Script Studio</a>
       <a href="#app" class="nav-workspace-only" style="display: none;">Generator</a>
       <a href="#agent" class="nav-workspace-only" style="display: none;">Agent</a>
@@ -32,7 +33,7 @@
       <a href="#pricing">Pricing</a>
     </div>
     <div class="nav-right">
-      <span id="nav-account" class="nav-account" style="display: none;"></span>
+      <span id="nav-account" class="nav-account" style="display: none;" onclick="app.openAccount()" title="Account, usage & history"></span>
       <div id="nav-trial-badge" class="trial-badge" style="display: none;">15d trial</div>
       <div id="nav-plan-badge" class="plan-badge plan-trial" style="display: none;">TRIAL</div>
       <div class="currency-toggle" id="nav-currency-toggle" style="display: none;">
@@ -221,6 +222,18 @@
         </div>
       </div>
     </div>
+
+    <!-- Discover Podcasts Section -->
+    <section id="discover" style="max-width:1140px; margin:0 auto; padding:30px 24px 10px;">
+      <div style="text-align:center; margin-bottom:28px;">
+        <div class="section-label" style="color:var(--accent-cyan);">Discover</div>
+        <h2 class="section-title" style="font-size:24px;">Find Podcasts by Field</h2>
+        <p class="section-sub" style="font-size:14px; max-width:640px; margin:0 auto;">Search the podcast catalog by topic or category for inspiration and research. Explicit-flagged shows are filtered out.</p>
+      </div>
+      <div id="discover-container">
+        <div style="padding:40px; text-align:center; color:var(--text-muted); font-family:monospace;">Loading discovery…</div>
+      </div>
+    </section>
 
     <!-- Script Studio Section -->
     <section id="studio" style="max-width:1140px; margin:0 auto; padding:30px 24px 10px;">
@@ -599,8 +612,19 @@
       </div>
       <div style="padding: 20px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:10px;">
         <button class="btn-modal-free" style="padding: 8px 16px; border-radius:6px; font-weight:600; cursor:pointer; width:auto;" onclick="app.hideTemplate()">Close</button>
-        <button class="btn-modal-pay" style="padding: 8px 16px; border-radius:6px; font-weight:600; cursor:pointer; width:auto;" onclick="app.downloadTemplate()">Use Template</button>
+        <button class="btn-modal-pay" style="padding: 8px 16px; border-radius:6px; font-weight:600; cursor:pointer; width:auto;" onclick="app.downloadTemplate()">⬇ Download Cover (PNG)</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Account Modal -->
+  <div id="account-modal" class="modal-overlay" onclick="app.closeAccount()">
+    <div class="modal" style="max-width:560px; max-height:86vh; overflow:auto;" onclick="event.stopPropagation()">
+      <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 class="modal-title">Your Account</h3>
+        <button onclick="app.closeAccount()" style="background:none; border:none; color:var(--text-muted); font-size:24px; cursor:pointer;">&times;</button>
+      </div>
+      <div id="account-body" style="padding:0 24px 24px;"></div>
     </div>
   </div>
 
@@ -617,5 +641,6 @@
   <script src="agent.js"></script>
   <script src="music-library.js"></script>
   <script src="music.js"></script>
+  <script src="discover.js"></script>
 </body>
 </html>

@@ -111,6 +111,18 @@ function bumpFeature(user, feature) {
   if (!user.featureUsage || user.featureUsage.date !== t) user.featureUsage = { date: t };
   user.featureUsage[feature] = (user.featureUsage[feature] || 0) + 1;
 }
+// Activity + billing history (newest first, capped). The preview is the user's
+// own prompt snippet, shown only back to them.
+function pushHistory(user, rec) {
+  user.history = Array.isArray(user.history) ? user.history : [];
+  user.history.unshift(rec);
+  if (user.history.length > 50) user.history.length = 50;
+}
+function pushTransaction(user, rec) {
+  user.transactions = Array.isArray(user.transactions) ? user.transactions : [];
+  user.transactions.unshift(rec);
+  if (user.transactions.length > 50) user.transactions.length = 50;
+}
 
 // Public view of a user — never leaks password hash or stored keys
 function publicUser(user) {
@@ -164,6 +176,14 @@ function handleMe(req, res, user) {
   sendJSON(res, 200, { user: publicUser(user) });
 }
 
+function handleAccount(req, res, user) {
+  sendJSON(res, 200, {
+    user: publicUser(user),
+    history: (user.history || []).slice(0, 30),
+    transactions: (user.transactions || []).slice(0, 30)
+  });
+}
+
 async function handleSaveKey(req, res, user) {
   const { key } = await readBody(req);
   const k = String(key || '').trim();
@@ -177,6 +197,38 @@ async function handleSaveKey(req, res, user) {
 
 function handleListKeys(req, res, user) {
   sendJSON(res, 200, { providers: Object.keys(user.keys || {}) });
+}
+
+// Podcast discovery via Apple's free iTunes Search API (no key). Done
+// server-side to avoid CORS and to enforce a content filter centrally:
+// explicit-flagged shows are dropped so users can't pull NSFW podcasts.
+async function handleDiscover(req, res, user, query) {
+  const term = String(query.term || '').trim().slice(0, 120);
+  const genre = String(query.genre || '').trim().slice(0, 40);
+  const q = [genre, term].filter(Boolean).join(' ').trim();
+  if (!q) throw { status: 400, message: 'Enter a search term.' };
+
+  const url = `https://itunes.apple.com/search?media=podcast&entity=podcast&limit=24&term=${encodeURIComponent(q)}`;
+  let data;
+  try {
+    const r = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(12000) });
+    data = await r.json();
+  } catch (e) {
+    throw { status: 502, message: 'Podcast search is unavailable right now. Try again shortly.' };
+  }
+
+  const results = (Array.isArray(data.results) ? data.results : [])
+    .filter(p => p.collectionExplicitness !== 'explicit' && p.trackExplicitness !== 'explicit')
+    .map(p => ({
+      name: p.collectionName || p.trackName || '',
+      artist: p.artistName || '',
+      genre: p.primaryGenreName || '',
+      artwork: p.artworkUrl600 || p.artworkUrl100 || '',
+      feedUrl: p.feedUrl || '',
+      link: p.collectionViewUrl || p.trackViewUrl || '',
+      episodes: p.trackCount || 0
+    }));
+  sendJSON(res, 200, { results, filtered: (data.resultCount || 0) - results.length });
 }
 
 async function handleDeleteKey(req, res, user, provider) {
@@ -208,11 +260,10 @@ async function handleAI(req, res, user) {
   // The actual provider fetch happens server-side (no CORS limits)
   const text = await providers.callAI(provider, key, String(systemPrompt || ''), String(userPrompt));
 
-  // Count usage only on success, only for the free plan
-  if (plan === 'free') {
-    bumpFeature(user, feature);
-    await store.saveUser(user);
-  }
+  // Count usage on success (free plan) and record a history entry (all plans).
+  if (plan === 'free') bumpFeature(user, feature);
+  pushHistory(user, { feature, at: new Date().toISOString(), preview: String(userPrompt).replace(/\s+/g, ' ').slice(0, 80) });
+  await store.saveUser(user);
   sendJSON(res, 200, { text, provider, feature, usage: featureUsageToday(user) });
 }
 
@@ -243,6 +294,7 @@ async function handleCheckout(req, res, user) {
   }
 
   user.plan = plan;
+  pushTransaction(user, { plan, at: new Date().toISOString(), mock: !billingConfigured });
   await store.saveUser(user);
   sendJSON(res, 200, { ok: true, user: publicUser(user), mock: !billingConfigured });
 }
@@ -382,11 +434,13 @@ const server = http.createServer(async (req, res) => {
     if (url === '/api/keys/' && method === 'DELETE') throw { status: 400, message: 'Provider required.' };
 
     if (url === '/api/auth/me' && method === 'GET') return handleMe(req, res, user);
+    if (url === '/api/account' && method === 'GET') return handleAccount(req, res, user);
     if (url === '/api/keys' && method === 'GET') return handleListKeys(req, res, user);
     if (url === '/api/keys' && method === 'POST') return await handleSaveKey(req, res, user);
     if (url.startsWith('/api/keys/') && method === 'DELETE') {
       return await handleDeleteKey(req, res, user, decodeURIComponent(url.slice('/api/keys/'.length)));
     }
+    if (url === '/api/discover' && method === 'GET') return await handleDiscover(req, res, user, query);
     if (url === '/api/ai' && method === 'POST') return await handleAI(req, res, user);
     if (url === '/api/billing/checkout' && method === 'POST') return await handleCheckout(req, res, user);
 

@@ -669,6 +669,10 @@ window.app = {
   initRazorpayCheckout,
   showAuthModal,
   hideAuthModal,
+  openAccount,
+  closeAccount,
+  acSetCurrency,
+  removeProviderKey,
   simulateSSO,
   loginWithProvider,
   setAuthMode,
@@ -1075,6 +1079,100 @@ function hideAuthModal() {
   if (modal) modal.classList.remove('show');
 }
 
+/* ── Account panel ───────────────────────────────── */
+let lastAccountData = null;
+const ACCOUNT_FEATURES = {
+  generate: 'Generations', studio: 'Script Studio', miner: 'Miner sections',
+  tracker: 'AI Stack audits', agent: 'Agent runs', music: 'Music briefs', chat: 'Chat messages'
+};
+
+function timeAgo(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  const s = (Date.now() - d.getTime()) / 1000;
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
+}
+
+async function openAccount() {
+  if (!(window.PF && PF.isAuthed())) { showAuthModal(); return; }
+  const modal = document.getElementById('account-modal');
+  const body = document.getElementById('account-body');
+  if (!modal || !body) return;
+  body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-muted);">Loading…</div>';
+  modal.classList.add('show');
+  try {
+    lastAccountData = await PF.account();
+    body.innerHTML = renderAccount(lastAccountData);
+  } catch (e) {
+    body.innerHTML = `<div class="ac-muted" style="padding:20px;">${escapeHTML(e.message)}</div>`;
+  }
+}
+function closeAccount() { document.getElementById('account-modal')?.classList.remove('show'); }
+
+function renderAccount(d) {
+  const u = d.user, e = escapeHTML;
+  let h = '';
+  h += `<div class="ac-sec"><div class="ac-h">Profile</div>
+    <div class="ac-row"><span>Email</span><b>${e(u.email)}</b></div>
+    <div class="ac-row"><span>Plan</span><b>${e(String(u.plan || '').toUpperCase())}</b></div>
+    ${u.plan === 'trial' ? `<div class="ac-row"><span>Trial</span><b>${u.daysLeft} days left</b></div>` : ''}
+    <div class="ac-row"><span>User ID</span><span class="ac-mono">${e(u.id)}</span></div></div>`;
+
+  h += `<div class="ac-sec"><div class="ac-h">Today's usage</div>`;
+  Object.keys(ACCOUNT_FEATURES).forEach(f => {
+    const used = (u.usage && u.usage[f]) || 0;
+    const lim = u.freeLimits && u.freeLimits[f];
+    const unlimited = u.plan !== 'free';
+    const pct = unlimited || !lim ? 0 : Math.min(100, used / lim * 100);
+    h += `<div class="ac-use"><div class="ac-use-top"><span>${ACCOUNT_FEATURES[f]}</span><span>${unlimited ? used + ' · unlimited' : used + ' / ' + lim}</span></div>
+      ${unlimited ? '' : `<div class="ac-bar"><div class="ac-bar-fill" style="width:${pct}%"></div></div>`}</div>`;
+  });
+  h += `</div>`;
+
+  h += `<div class="ac-sec"><div class="ac-h">Connected API keys</div>`;
+  if ((u.providers || []).length) {
+    u.providers.forEach(p => { h += `<div class="ac-row"><span>🔑 ${e(p)}</span><button class="ac-rm" onclick="app.removeProviderKey('${e(p)}')">Remove</button></div>`; });
+  } else h += `<div class="ac-muted">No keys stored. Add one in the workspace key bar.</div>`;
+  h += `</div>`;
+
+  h += `<div class="ac-sec"><div class="ac-h">Settings</div>
+    <div class="ac-row"><span>Currency</span><span>
+      <button class="ac-cur ${appState.currency === 'USD' ? 'on' : ''}" onclick="app.acSetCurrency('USD')">$ USD</button>
+      <button class="ac-cur ${appState.currency === 'INR' ? 'on' : ''}" onclick="app.acSetCurrency('INR')">₹ INR</button></span></div>
+    <div class="ac-row"><span>Session</span><button class="ac-signout" onclick="app.closeAccount(); app.signOut()">Sign out</button></div></div>`;
+
+  h += `<div class="ac-sec"><div class="ac-h">Recent activity</div>`;
+  if ((d.history || []).length) {
+    d.history.forEach(r => { h += `<div class="ac-hist"><span class="ac-hist-f">${e(r.feature)}</span><span class="ac-hist-p">${e(r.preview || '')}</span><span class="ac-hist-t">${e(timeAgo(r.at))}</span></div>`; });
+  } else h += `<div class="ac-muted">No activity yet — generate something to see it here.</div>`;
+  h += `</div>`;
+
+  h += `<div class="ac-sec"><div class="ac-h">Plan changes</div>`;
+  if ((d.transactions || []).length) {
+    d.transactions.forEach(tx => { h += `<div class="ac-row"><span>${e(String(tx.plan || '').toUpperCase())} ${tx.mock ? '<span class="ac-mock">mock</span>' : ''}</span><span class="ac-muted">${e(timeAgo(tx.at))}</span></div>`; });
+  } else h += `<div class="ac-muted">No plan changes yet.</div>`;
+  h += `</div>`;
+  return h;
+}
+
+function acSetCurrency(cur) {
+  setCurrency(cur);
+  if (lastAccountData) document.getElementById('account-body').innerHTML = renderAccount(lastAccountData);
+}
+
+async function removeProviderKey(p) {
+  try {
+    await PF.removeKey(p);
+    await PF.refreshMe();
+    syncBackendUser();
+    showToast('Key removed.', 'success');
+    openAccount();
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
 // Real OAuth when a backend has it configured; simulated SSO for the static demo.
 function loginWithProvider(provider) {
   const p = String(provider).toLowerCase();
@@ -1285,10 +1383,70 @@ function hideTemplate() {
   if (modal) modal.classList.remove('show');
 }
 
+// Build a self-contained SVG cover (1400x1400) for the chosen theme.
+function buildCoverSVG(theme, title, sub) {
+  const e = escapeHTML;
+  const W = 1400;
+  const THEMES = {
+    synthwave: { defs: '<radialGradient id="g" cx="50%" cy="45%" r="72%"><stop offset="0%" stop-color="#9d5cf5"/><stop offset="82%" stop-color="#160c2d"/></radialGradient>', border: '#7c3aed', badge: 'EPISODE 01', mic: '🎙️', titleColor: '#ffffff', subColor: '#ffffff', titleFamily: "Outfit, Inter, sans-serif", italic: 'normal', badgeBg: 'rgba(255,255,255,0.16)', badgeColor: '#ffffff' },
+    tech:      { defs: '<linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0f172a"/><stop offset="100%" stop-color="#0284c7"/></linearGradient>', border: '#06b6d4', badge: 'TECH', mic: '⚡', titleColor: '#ffffff', subColor: '#ffffff', titleFamily: "Outfit, Inter, sans-serif", italic: 'normal', badgeBg: 'rgba(255,255,255,0.16)', badgeColor: '#ffffff' },
+    minimal:   { defs: '<radialGradient id="g" cx="50%" cy="45%" r="72%"><stop offset="0%" stop-color="#fed7aa"/><stop offset="100%" stop-color="#ea580c"/></radialGradient>', border: '#f97316', badge: 'WEEKLY', mic: '🖋️', titleColor: '#0f172a', subColor: '#0f172a', titleFamily: "Georgia, serif", italic: 'italic', badgeBg: 'rgba(15,23,42,0.12)', badgeColor: '#0f172a' }
+  };
+  const t = THEMES[theme] || THEMES.synthwave;
+  const ttl = (title || 'YOUR TITLE');
+  const fs = ttl.length > 12 ? 92 : ttl.length > 8 ? 112 : 134;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${W}" viewBox="0 0 ${W} ${W}">
+  <defs>${t.defs}</defs>
+  <rect width="${W}" height="${W}" fill="url(#g)"/>
+  <rect x="0" y="${W - 30}" width="${W}" height="30" fill="${t.border}"/>
+  <rect x="70" y="70" rx="14" ry="14" width="300" height="68" fill="${t.badgeBg}"/>
+  <text x="220" y="115" font-family="Outfit, Inter, sans-serif" font-weight="800" font-size="34" letter-spacing="6" fill="${t.badgeColor}" text-anchor="middle">${e(t.badge)}</text>
+  <text x="${W / 2}" y="${W / 2 - 110}" font-size="220" text-anchor="middle">${t.mic}</text>
+  <text x="${W / 2}" y="${W / 2 + 110}" font-family="${t.titleFamily}" font-style="${t.italic}" font-weight="900" font-size="${fs}" fill="${t.titleColor}" text-anchor="middle">${e(ttl)}</text>
+  <text x="${W / 2}" y="${W / 2 + 210}" font-family="Inter, sans-serif" font-weight="600" font-size="48" letter-spacing="8" fill="${t.subColor}" opacity="0.85" text-anchor="middle">${e(sub || 'SUBTITLE')}</text>
+</svg>`;
+}
+
+// "Use Template" now exports a real cover image (PNG, with SVG fallback).
 function downloadTemplate() {
-  const inputTitle = document.getElementById('template-input-title')?.value || '';
-  showToast(`Template "${inputTitle || currentSelectedTheme.toUpperCase()}" imported successfully into your editor!`, "success");
-  hideTemplate();
+  const title = (document.getElementById('template-input-title')?.value || '').toUpperCase();
+  const sub = (document.getElementById('template-input-sub')?.value || '').toUpperCase();
+  const theme = currentSelectedTheme || 'synthwave';
+  const svg = buildCoverSVG(theme, title, sub);
+  const svgUrl = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+
+  const triggerDownload = (href, ext) => {
+    const a = document.createElement('a');
+    a.href = href; a.download = `podcast-cover-${theme}.${ext}`;
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+
+  const img = new Image();
+  img.onload = () => {
+    try {
+      const c = document.createElement('canvas');
+      c.width = 1400; c.height = 1400;
+      c.getContext('2d').drawImage(img, 0, 0, 1400, 1400);
+      c.toBlob((b) => {
+        if (!b) throw new Error('no blob');
+        const pngUrl = URL.createObjectURL(b);
+        triggerDownload(pngUrl, 'png');
+        setTimeout(() => { URL.revokeObjectURL(pngUrl); URL.revokeObjectURL(svgUrl); }, 1000);
+        showToast('Cover downloaded as PNG.', 'success');
+        hideTemplate();
+      }, 'image/png');
+    } catch (err) {
+      triggerDownload(svgUrl, 'svg');
+      showToast('Cover downloaded as SVG.', 'success');
+      hideTemplate();
+    }
+  };
+  img.onerror = () => {
+    triggerDownload(svgUrl, 'svg');
+    showToast('Cover downloaded as SVG.', 'success');
+    hideTemplate();
+  };
+  img.src = svgUrl;
 }
 
 /* ── Landing Animations ──────────────────────────── */
