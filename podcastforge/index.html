@@ -23,7 +23,9 @@
     <div class="nav-links" id="navbar-links">
       <a href="#landing-hero" class="nav-landing-only">Home</a>
       <a href="#landing-features" class="nav-landing-only">Features</a>
+      <a href="#studio" class="nav-workspace-only" style="display: none;">Script Studio</a>
       <a href="#app" class="nav-workspace-only" style="display: none;">Generator</a>
+      <a href="#miner" class="nav-workspace-only" style="display: none;">Miner</a>
       <a href="#tools">AI Stack Tracker</a>
       <a href="#pricing">Pricing</a>
     </div>
@@ -217,6 +219,18 @@
       </div>
     </div>
 
+    <!-- Script Studio Section -->
+    <section id="studio" style="max-width:1140px; margin:0 auto; padding:30px 24px 10px;">
+      <div style="text-align:center; margin-bottom:28px;">
+        <div class="section-label" style="color:var(--accent-violet2);">Script Studio</div>
+        <h2 class="section-title" style="font-size:24px;">Pro Script &amp; Video Prompt Templates</h2>
+        <p class="section-sub" style="font-size:14px; max-width:640px; margin:0 auto;">Stop pasting plain-English prompts into ChatGPT. Pick a professional template, fill in the blanks, and generate a structured podcast or YouTube script.</p>
+      </div>
+      <div id="studio-container">
+        <div style="padding:40px; text-align:center; color:var(--text-muted); font-family:monospace;">Loading Script Studio…</div>
+      </div>
+    </section>
+
     <!-- App Section -->
     <section id="app">
       <div class="api-bar">
@@ -239,6 +253,10 @@
               <div class="lock-title">Pro Tools Locked</div>
               <button class="lock-cta" onclick="app.showPaywall()">Unlock</button>
             </div>
+          </div>
+          <div class="gen-tpl-bar">
+            <span class="gen-tpl-label">📋 Start from a template</span>
+            <select id="gen-template-select" class="gen-tpl-select"><option value="">— Blank transcript —</option></select>
           </div>
           <textarea id="transcript" placeholder="Paste your podcast transcript here..."></textarea>
           <div class="options-row">
@@ -307,6 +325,34 @@
     </section>
   </main>
 </div> <!-- Close workspace-view -->
+
+    <!-- Long-Episode Content Miner Section -->
+    <section id="miner">
+      <div style="text-align:center; margin-bottom:40px;">
+        <div class="section-label">The Engine</div>
+        <h2 class="section-title">Long-Episode Content Miner</h2>
+        <p class="section-sub">
+          Paste a full 1–6 hour transcript. Instead of one summary, the engine splits it into sections,
+          mines each one independently, then ranks every standalone, postable moment — so ideas from
+          hour five surface as clearly as the intro.
+        </p>
+      </div>
+
+      <div class="miner-wrapper" id="miner-container">
+        <!-- Rendered by engine.js -->
+        <div style="padding:40px; text-align:center; color:var(--text-muted); font-family:monospace;">
+          Loading engine…
+        </div>
+
+        <!-- Pro-gate overlay (toggled by updateLocks in app.js) -->
+        <div id="miner-lock" class="feature-lock" style="display:none;">
+          <div class="lock-icon">🔒</div>
+          <div class="lock-title">The Content Miner is a Pro feature</div>
+          <div class="lock-sub">Upgrade to mine full-length episodes for postable moments.</div>
+          <button class="lock-cta" onclick="app.showPaywall()">Unlock Pro</button>
+        </div>
+      </div>
+    </section>
 
     <!-- AI Stack Tracker Section -->
     <section id="tools">
@@ -523,7 +569,11 @@
   <div id="toast" class="toast"></div>
 
   <!-- Scripts -->
+  <script src="core.js"></script>
+  <script src="templates.js"></script>
   <script src="app.js"></script>
   <script src="tracker.js"></script>
+  <script src="engine.js"></script>
+  <script src="studio.js"></script>
 </body>
 </html>

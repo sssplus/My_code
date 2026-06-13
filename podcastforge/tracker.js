@@ -127,7 +127,10 @@ function tkRemove(id) {
 
 // AI Audit
 async function tkRunAudit() {
-  if (!window.app || !localStorage.getItem('pf_api_key')) {
+  const keyAvailable = window.app && (typeof window.app.hasKey === 'function'
+    ? window.app.hasKey()
+    : localStorage.getItem('pf_api_key'));
+  if (!keyAvailable) {
     tkState.auditError = "Please enter your API key in the main app above to run an audit.";
     tkRender();
     return;

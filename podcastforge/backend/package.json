@@ -1,0 +1,19 @@
+{
+  "name": "podcastforge-backend",
+  "version": "1.0.0",
+  "description": "PodcastForge backend: accounts, encrypted BYO-key storage, server-side AI provider proxy, plan/usage enforcement, billing. Postgres in production (DATABASE_URL), JSON file for local dev.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "pg": "^8.21.0"
+  },
+  "devDependencies": {
+    "pg-mem": "^3.0.14"
+  }
+}
