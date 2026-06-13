@@ -45,7 +45,7 @@
     state.generating = true; state.output = null; render();
     try {
       const userPrompt = fill(t.user, vals);
-      const text = await window.app.callAI(t.system, userPrompt);
+      const text = await window.app.callAI(t.system, userPrompt, 'studio');
       state.output = { type: 'text', data: text };
     } catch (e) {
       state.output = { type: 'error', data: e.message };

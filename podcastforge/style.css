@@ -1497,3 +1497,25 @@ footer { border-top: 1px solid var(--border); padding: 32px 40px; display: flex;
   border-radius: 100px; padding: 5px 12px;
 }
 .nav-account::before { content: '👤'; font-size: 12px; }
+
+/* ── Auth modal: mode tabs, hints, disabled SSO ──── */
+.auth-tabs {
+  display: flex; gap: 6px; background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border); border-radius: 100px;
+  padding: 4px; margin-bottom: 22px;
+}
+.auth-tab {
+  flex: 1; padding: 9px 12px; border: none; cursor: pointer;
+  background: transparent; color: var(--text-secondary);
+  font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600;
+  border-radius: 100px; transition: var(--transition-fast);
+}
+.auth-tab.active { background: var(--accent-violet); color: #fff; }
+.auth-hint { font-size: 11.5px; color: var(--text-muted); margin: 0 2px 18px; }
+.sso-hint {
+  font-size: 11.5px; color: var(--accent-amber);
+  text-align: center; margin: 2px 0 0;
+}
+.btn-sso.disabled, .btn-sso:disabled {
+  opacity: 0.4; cursor: not-allowed; filter: grayscale(0.6);
+}

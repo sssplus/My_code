@@ -26,7 +26,7 @@
       <a href="#studio" class="nav-workspace-only" style="display: none;">Script Studio</a>
       <a href="#app" class="nav-workspace-only" style="display: none;">Generator</a>
       <a href="#miner" class="nav-workspace-only" style="display: none;">Miner</a>
-      <a href="#tools">AI Stack Tracker</a>
+      <a href="#tools" class="nav-workspace-only" style="display: none;">AI Stack Tracker</a>
       <a href="#pricing">Pricing</a>
     </div>
     <div class="nav-right">
@@ -324,10 +324,7 @@
         </div>
       </div>
     </section>
-  </main>
-</div> <!-- Close workspace-view -->
-
-    <!-- Long-Episode Content Miner Section -->
+    <!-- Long-Episode Content Miner Section (inside workspace: shown after login) -->
     <section id="miner">
       <div style="text-align:center; margin-bottom:40px;">
         <div class="section-label">The Engine</div>
@@ -345,12 +342,12 @@
           Loading engine…
         </div>
 
-        <!-- Pro-gate overlay (toggled by updateLocks in app.js) -->
+        <!-- Shown only when the trial has expired (free plan keeps daily-capped access) -->
         <div id="miner-lock" class="feature-lock" style="display:none;">
           <div class="lock-icon">🔒</div>
-          <div class="lock-title">The Content Miner is a Pro feature</div>
-          <div class="lock-sub">Upgrade to mine full-length episodes for postable moments.</div>
-          <button class="lock-cta" onclick="app.showPaywall()">Unlock Pro</button>
+          <div class="lock-title">Your trial has ended</div>
+          <div class="lock-sub">Choose a plan to keep mining. The Free plan includes 10 mined sections/day.</div>
+          <button class="lock-cta" onclick="app.showPaywall()">Choose a plan</button>
         </div>
       </div>
     </section>
@@ -369,12 +366,14 @@
 
         <div id="tracker-lock" class="feature-lock" style="display: none;">
           <div class="lock-icon">🔒</div>
-          <div class="lock-title">AI Stack Tracker is a Pro feature</div>
-          <div class="lock-sub">Upgrade to track and audit your AI spend.</div>
-          <button class="lock-cta" onclick="app.showPaywall()">Unlock Pro</button>
+          <div class="lock-title">Your trial has ended</div>
+          <div class="lock-sub">Choose a plan to keep auditing. The Free plan includes 2 audits/day.</div>
+          <button class="lock-cta" onclick="app.showPaywall()">Choose a plan</button>
         </div>
       </div>
     </section>
+  </main>
+</div> <!-- Close workspace-view -->
 
     <!-- Pricing Section -->
     <section id="pricing">
@@ -393,11 +392,11 @@
             <div class="plan-price"><sup class="price-cur">$</sup><span class="price-val" data-usd="0" data-inr="0">0</span></div>
             <div class="plan-period">forever</div>
             <ul class="plan-features">
-              <li><span class="check">✓</span> 5 generations per day</li>
+              <li><span class="check">✓</span> 5 script/content generations per day</li>
+              <li><span class="check">✓</span> Content Miner — 10 sections/day</li>
+              <li><span class="check">✓</span> AI Stack audits — 2/day</li>
               <li><span class="check">✓</span> Bring your own API key</li>
-              <li><span class="check">✓</span> All 4 content formats</li>
               <li><span class="cross">✕</span> No transcript AI tools</li>
-              <li><span class="cross">✕</span> No AI Stack Tracker</li>
             </ul>
             <button class="btn-plan btn-plan-outline" onclick="app.selectPlan('free')">Choose Free</button>
           </div>
@@ -456,7 +455,7 @@
         <div class="modal-plan-card">
           <div class="modal-plan-name">Free</div>
           <div class="modal-plan-price"><sup class="price-cur">$</sup><span class="price-val" data-usd="0" data-inr="0">0</span></div>
-          <div class="modal-plan-desc">5 generations per day. No pro tools.</div>
+          <div class="modal-plan-desc">Daily-capped access: 5 generations, 10 miner sections, 2 audits per day.</div>
           <ul class="modal-plan-perks">
             <li><span class="chk">✓</span> Bring your own key</li>
           </ul>
@@ -484,55 +483,56 @@
     </div>
   </div>
 
-  <!-- Glassmorphic Login Gateway Modal -->
+  <!-- Auth Modal (Create account / Sign in) -->
   <div id="auth-modal" class="auth-overlay">
     <div class="auth-card">
       <button class="auth-close-btn" onclick="app.hideAuthModal()">&times;</button>
+
+      <!-- Mode toggle -->
+      <div class="auth-tabs">
+        <button id="auth-tab-signup" class="auth-tab active" onclick="app.setAuthMode('signup')">Create account</button>
+        <button id="auth-tab-signin" class="auth-tab" onclick="app.setAuthMode('signin')">Sign in</button>
+      </div>
+
       <div class="auth-header">
-        <span class="logo">🎙️</span>
-        <h3 class="auth-title">Enter Workspace</h3>
-        <p class="auth-subtitle">Sign in to access your generator dashboard.</p>
+        <h3 class="auth-title" id="auth-title">Create your account</h3>
+        <p class="auth-subtitle" id="auth-subtitle">New here? Create an account to start your free 15-day trial — full access, no card required.</p>
       </div>
 
       <!-- SSO Options -->
       <div class="sso-row">
-        <button class="btn-sso" onclick="app.loginWithProvider('Google')">
+        <button class="btn-sso" id="btn-sso-google" onclick="app.loginWithProvider('Google')">
           <svg viewBox="0 0 24 24">
             <path d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.136 4.114A5.79 5.79 0 018.2 12.725a5.79 5.79 0 015.79-5.79c2.5 0 4.5 1.576 5.234 3.793l3.968-3.076C20.89 3.518 16.812 1 12 1 5.925 1 1 5.925 1 12s4.925 11 11 11c5.738 0 10.45-4.148 10.93-9.5H12.24z"/>
           </svg>
           Google
         </button>
-        <button class="btn-sso" onclick="app.loginWithProvider('GitHub')">
+        <button class="btn-sso" id="btn-sso-github" onclick="app.loginWithProvider('GitHub')">
           <svg viewBox="0 0 24 24">
             <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
           </svg>
           GitHub
         </button>
       </div>
+      <div id="sso-hint" class="sso-hint" style="display:none;">Social login isn’t set up on this server yet — use email below.</div>
 
-      <div class="sso-divider">Or sign in with email</div>
+      <div class="sso-divider">or with email</div>
 
       <div class="input-group">
-        <input type="text" id="auth-email" placeholder="Email" required autocomplete="email" value="creator@podcastforge.com">
-        <label for="auth-email">Username or Email</label>
+        <input type="email" id="auth-email" placeholder=" " required autocomplete="email">
+        <label for="auth-email">Email</label>
       </div>
 
-      <div class="input-group">
-        <input type="password" id="auth-password" placeholder="Password" required autocomplete="current-password">
+      <div class="input-group" style="margin-bottom:8px;">
+        <input type="password" id="auth-password" placeholder=" " required autocomplete="new-password">
         <label for="auth-password">Password</label>
       </div>
+      <div id="auth-hint" class="auth-hint">Use at least 8 characters.</div>
 
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; font-size:12.5px; color:var(--text-secondary);">
-        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
-          <input type="checkbox" id="auth-remember" checked style="accent-color:var(--accent-violet);"> Remember me
-        </label>
-        <a href="#" onclick="alert('Simulation: Enter anything to sign in!'); return false;" style="color:var(--accent-violet2); text-decoration:none;">Forgot details?</a>
-      </div>
+      <button class="auth-btn-primary" id="auth-submit" onclick="app.submitAuth()">Create account &amp; start trial</button>
 
-      <button class="auth-btn-primary" onclick="app.handleAuthSubmit()">Sign In & Enter</button>
-
-      <div class="auth-footer-links">
-        New creator? <a href="#" onclick="app.startFreeTrialAuth(); return false;">Start 15-day Trial</a>
+      <div class="auth-footer-links" id="auth-switch">
+        Already have an account? <a href="#" onclick="app.setAuthMode('signin'); return false;">Sign in</a>
       </div>
     </div>
   </div>

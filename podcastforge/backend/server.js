@@ -31,6 +31,13 @@ const MAX_BODY = 200 * 1024;                              // 200 KB JSON cap
 const FREE_DAILY_LIMIT = 5;
 const TRIAL_DAYS = 15;
 
+// Per-feature daily caps for the FREE plan. trial/fixed/payg are unlimited.
+// Each unit is one AI call: the Miner makes one call per transcript section,
+// so its cap is measured in sections; Generator/Studio/Tracker are 1 call each.
+const FREE_LIMITS = { generate: 5, studio: 5, miner: 10, tracker: 2 };
+const FEATURES = Object.keys(FREE_LIMITS);
+const FEATURE_LABEL = { generate: 'content generation', studio: 'Script Studio', miner: 'the Content Miner', tracker: 'the AI Stack audit' };
+
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.svg': 'image/svg+xml',
@@ -86,17 +93,38 @@ function daysLeft(user) {
   return Math.max(0, TRIAL_DAYS - days);
 }
 
+// Per-feature daily usage helpers (reset each day)
+function featureUsageToday(user) {
+  const t = today();
+  const fu = user.featureUsage && user.featureUsage.date === t ? user.featureUsage : { date: t };
+  const out = {};
+  FEATURES.forEach(f => { out[f] = fu[f] || 0; });
+  return out;
+}
+function featureCount(user, feature) {
+  const t = today();
+  if (!user.featureUsage || user.featureUsage.date !== t) return 0;
+  return user.featureUsage[feature] || 0;
+}
+function bumpFeature(user, feature) {
+  const t = today();
+  if (!user.featureUsage || user.featureUsage.date !== t) user.featureUsage = { date: t };
+  user.featureUsage[feature] = (user.featureUsage[feature] || 0) + 1;
+}
+
 // Public view of a user — never leaks password hash or stored keys
 function publicUser(user) {
   const plan = effectivePlan(user);
-  const usage = user.usage && user.usage.date === today() ? user.usage.count : 0;
+  const usage = featureUsageToday(user);
   return {
     id: user.id,
     email: user.email,
     plan,
     daysLeft: daysLeft(user),
-    usageToday: usage,
-    freeLimit: FREE_DAILY_LIMIT,
+    usage,                       // { generate, studio, miner, tracker } counts today
+    freeLimits: FREE_LIMITS,     // caps that apply on the free plan
+    usageToday: usage.generate,  // back-compat for existing UI
+    freeLimit: FREE_LIMITS.generate,
     providers: Object.keys(user.keys || {})
   };
 }
@@ -160,14 +188,14 @@ async function handleAI(req, res, user) {
   const plan = effectivePlan(user);
   if (plan === 'expired') throw { status: 402, message: 'Your trial has ended. Choose a plan to keep generating.' };
 
-  if (plan === 'free') {
-    const used = user.usage && user.usage.date === today() ? user.usage.count : 0;
-    if (used >= FREE_DAILY_LIMIT) {
-      throw { status: 429, message: `Daily free limit reached (${FREE_DAILY_LIMIT}/${FREE_DAILY_LIMIT}). Upgrade to continue.` };
-    }
+  const { systemPrompt, userPrompt, provider: wanted, feature: rawFeature } = await readBody(req);
+  const feature = FEATURES.includes(rawFeature) ? rawFeature : 'generate';
+
+  // Per-feature daily cap on the free plan (trial/paid are unlimited).
+  if (plan === 'free' && featureCount(user, feature) >= FREE_LIMITS[feature]) {
+    throw { status: 429, message: `Daily free limit reached for ${FEATURE_LABEL[feature]} (${FREE_LIMITS[feature]}/day). Upgrade for unlimited.` };
   }
 
-  const { systemPrompt, userPrompt, provider: wanted } = await readBody(req);
   if (typeof userPrompt !== 'string' || !userPrompt.trim()) throw { status: 400, message: 'userPrompt is required.' };
   if (userPrompt.length > 60000) throw { status: 400, message: 'Prompt is too long.' };
 
@@ -182,12 +210,10 @@ async function handleAI(req, res, user) {
 
   // Count usage only on success, only for the free plan
   if (plan === 'free') {
-    const t = today();
-    user.usage = user.usage && user.usage.date === t ? user.usage : { date: t, count: 0 };
-    user.usage.count++;
+    bumpFeature(user, feature);
     await store.saveUser(user);
   }
-  sendJSON(res, 200, { text, provider, usageToday: user.usage ? user.usage.count : 0 });
+  sendJSON(res, 200, { text, provider, feature, usage: featureUsageToday(user) });
 }
 
 async function handleCheckout(req, res, user) {

@@ -39,7 +39,7 @@
     if (!window.app || typeof window.app.callAI !== "function") {
       return Promise.reject(new Error("AI caller not available. Load app.js first."));
     }
-    return window.app.callAI(sys, usr);
+    return window.app.callAI(sys, usr, "miner");
   };
 
   // A key is usable if one is typed in the bar OR stored on the backend account.
@@ -195,6 +195,12 @@
           });
         }
       } catch (e) {
+        // Free-plan daily cap reached mid-run: stop and keep what we have.
+        if (/limit reached/i.test(e.message)) {
+          state.error = e.message + (state.moments.length ? ' Showing what was mined so far.' : '');
+          state.progress.done = i + 1;
+          break;
+        }
         state.failedChunks++;
         console.warn(`Section ${i + 1} failed:`, e.message);
       }

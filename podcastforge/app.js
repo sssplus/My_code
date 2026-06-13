@@ -187,6 +187,8 @@ function showPaywall() {
 }
 
 function checkFreeUsage() {
+  // When signed into the backend, the server is authoritative on per-feature caps.
+  if (window.PF && PF.isAuthed()) return true;
   if (appState.plan !== 'free') return true;
 
   const today = new Date().toISOString().split('T')[0];
@@ -252,18 +254,17 @@ function updateNavState() {
 
 function updateLocks() {
   const isLanding = sessionStorage.getItem('pf_view_state') === 'landing';
-  const isFree = appState.plan === 'free' || appState.plan === 'expired' || isLanding;
+  // Transcript AI tools are Pro-only (free has none). Miner + Tracker are
+  // available on free with daily caps, so they're locked only when there's no
+  // active session at all (expired trial, or viewing the landing page).
+  const noAccess = appState.plan === 'expired' || isLanding;
+  const transcriptLocked = noAccess || appState.plan === 'free';
 
+  els.toolsLock.style.display = transcriptLocked ? 'flex' : 'none';
+  const trackerLock = document.getElementById('tracker-lock');
   const minerLock = document.getElementById('miner-lock');
-  if (isFree) {
-    els.toolsLock.style.display = 'flex';
-    document.getElementById('tracker-lock').style.display = 'flex';
-    if (minerLock) minerLock.style.display = 'flex';
-  } else {
-    els.toolsLock.style.display = 'none';
-    document.getElementById('tracker-lock').style.display = 'none';
-    if (minerLock) minerLock.style.display = 'none';
-  }
+  if (trackerLock) trackerLock.style.display = noAccess ? 'flex' : 'none';
+  if (minerLock) minerLock.style.display = noAccess ? 'flex' : 'none';
 
   // Pro Upgrade button visibility in nav
   const isWorkspace = sessionStorage.getItem('pf_view_state') === 'workspace';
@@ -557,12 +558,13 @@ function friendlyNetworkError(provider) {
   return `Could not reach ${label}. Check your internet connection, an ad-blocker/extension may be blocking the request, or the provider may not allow browser (CORS) calls from this origin.`;
 }
 
-async function callAI(systemPrompt, userPrompt) {
+async function callAI(systemPrompt, userPrompt, feature) {
   // Backend path: the server holds the key and performs the provider fetch
   // (server-to-server, so every provider works — including NVIDIA/OpenAI).
+  // `feature` (generate|studio|miner|tracker) drives the free-plan daily caps.
   if (window.PF && PF.isAuthed()) {
     const prov = appState.provider !== 'none' ? appState.provider : undefined;
-    return PF.callAI(systemPrompt, userPrompt, prov);
+    return PF.callAI(systemPrompt, userPrompt, prov, feature || 'generate');
   }
 
   const key = appState.apiKey.trim();
@@ -665,6 +667,8 @@ window.app = {
   hideAuthModal,
   simulateSSO,
   loginWithProvider,
+  setAuthMode,
+  submitAuth,
   handleAuthSubmit,
   startFreeTrialAuth,
   transitionToWorkspace,
@@ -725,7 +729,7 @@ Transcript:
 ${txt.substring(0, 15000)}`;
 
   try {
-    const result = await callAI(sysPrompt, userPrompt);
+    const result = await callAI(sysPrompt, userPrompt, 'generate');
     generatedData = safeParseJSON(result);
 
     incrementFreeUsage();
@@ -812,7 +816,7 @@ async function sendChatMessage() {
   const userPrompt = `Current Content:\n${JSON.stringify(generatedData[format])}\n\nUser Request: ${msg}\n\nReturn the updated content.`;
 
   try {
-    const result = await callAI(sysPrompt, userPrompt);
+    const result = await callAI(sysPrompt, userPrompt, 'generate');
     let clean = result;
     if (format === 'twitter') {
       try { clean = safeParseJSON(result); } catch (e) { /* keep raw text */ }
@@ -855,7 +859,7 @@ async function runTranscriptTool(type) {
   btn.disabled = true;
 
   try {
-    const res = await callAI(prompt, txt);
+    const res = await callAI(prompt, txt, 'generate');
     els.transcript.value = res;
     showToast("Transcript updated!", "success");
   } catch (e) {
@@ -972,9 +976,47 @@ document.querySelectorAll('.option-chip').forEach(chip => {
 document.getElementById('btn-nav-upgrade').addEventListener('click', showPaywall);
 
 // Auth Gateway & Transitions implementation
+let authMode = 'signup'; // 'signup' | 'signin'
+
+function setAuthMode(mode) {
+  authMode = mode === 'signin' ? 'signin' : 'signup';
+  const signup = authMode === 'signup';
+  const t = (id) => document.getElementById(id);
+  t('auth-tab-signup')?.classList.toggle('active', signup);
+  t('auth-tab-signin')?.classList.toggle('active', !signup);
+  if (t('auth-title')) t('auth-title').textContent = signup ? 'Create your account' : 'Welcome back';
+  if (t('auth-subtitle')) t('auth-subtitle').textContent = signup
+    ? 'Create an account to start your free 15-day trial — full access, no card required.'
+    : 'Sign in to get back to your workspace.';
+  if (t('auth-submit')) t('auth-submit').textContent = signup ? 'Create account & start trial' : 'Sign in';
+  if (t('auth-hint')) t('auth-hint').style.display = signup ? 'block' : 'none';
+  if (t('auth-password')) t('auth-password').setAttribute('autocomplete', signup ? 'new-password' : 'current-password');
+  if (t('auth-switch')) {
+    t('auth-switch').innerHTML = signup
+      ? 'Already have an account? <a href="#" onclick="app.setAuthMode(\'signin\'); return false;">Sign in</a>'
+      : 'New here? <a href="#" onclick="app.setAuthMode(\'signup\'); return false;">Create an account</a>';
+  }
+}
+
+// Reflect which social logins the server actually has configured.
+function updateSSOState() {
+  const backend = window.PF && PF.hasBackend();
+  const gOn = !backend || (PF.oauthEnabled && PF.oauthEnabled('google'));
+  const ghOn = !backend || (PF.oauthEnabled && PF.oauthEnabled('github'));
+  const g = document.getElementById('btn-sso-google');
+  const gh = document.getElementById('btn-sso-github');
+  if (g) { g.disabled = !gOn; g.classList.toggle('disabled', !gOn); }
+  if (gh) { gh.disabled = !ghOn; gh.classList.toggle('disabled', !ghOn); }
+  const hint = document.getElementById('sso-hint');
+  if (hint) hint.style.display = (backend && (!gOn || !ghOn)) ? 'block' : 'none';
+}
+
 function showAuthModal() {
+  setAuthMode('signup');
+  updateSSOState();
   const modal = document.getElementById('auth-modal');
   if (modal) modal.classList.add('show');
+  setTimeout(() => document.getElementById('auth-email')?.focus(), 50);
 }
 
 function hideAuthModal() {
@@ -987,74 +1029,67 @@ function loginWithProvider(provider) {
   const p = String(provider).toLowerCase();
   if (window.PF && PF.hasBackend()) {
     if (PF.oauthEnabled(p)) { PF.startOAuth(p); return; }
-    showToast(`${provider} login isn't enabled on this server. Use email sign-in, or set ${provider.toUpperCase()}_CLIENT_ID/SECRET.`, 'warn');
+    showToast(`${provider} login isn't set up on this server yet. Use email below.`, 'warn');
     return;
   }
   simulateSSO(provider);
 }
 
 function simulateSSO(provider) {
-  showToast(`Connected successfully with ${provider}!`, 'success');
-  setTimeout(() => {
-    handleAuthSubmit();
-  }, 500);
+  showToast(`Connected with ${provider} (demo).`, 'success');
+  setTimeout(transitionToWorkspace, 400);
 }
 
-async function handleAuthSubmit() {
+// Single entry point for the email form; branches on the selected mode.
+async function submitAuth() {
   const email = document.getElementById('auth-email').value.trim();
   const password = document.getElementById('auth-password').value;
-  if (!email) {
-    showToast("Please enter username or email", "warn");
+
+  if (!(window.PF && PF.hasBackend())) {
+    // Static demo with no backend: just enter the workspace.
+    if (!email) { showToast('Please enter an email.', 'warn'); return; }
+    transitionToWorkspace();
     return;
   }
 
-  // Real auth when a backend is present; demo transition otherwise.
-  if (window.PF && PF.hasBackend()) {
-    if (!password) { showToast("Please enter your password", "warn"); return; }
-    try {
-      await PF.login(email, password);
-      syncBackendUser();
-      showToast("Signed in!", "success");
-      transitionToWorkspace();
-    } catch (e) {
-      showToast(e.message, "error");
-    }
-    return;
-  }
-  transitionToWorkspace();
-}
+  if (!email) { showToast('Please enter your email.', 'warn'); return; }
+  const btn = document.getElementById('auth-submit');
+  const restore = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
 
-async function startFreeTrialAuth() {
-  // Real account creation when a backend is present.
-  if (window.PF && PF.hasBackend()) {
-    const email = document.getElementById('auth-email').value.trim();
-    const password = document.getElementById('auth-password').value;
-    if (!email || password.length < 8) {
-      showToast("Enter an email and an 8+ character password to start your trial.", "warn");
-      return;
-    }
-    try {
+  try {
+    if (authMode === 'signup') {
+      if (password.length < 8) { showToast('Password must be at least 8 characters.', 'warn'); return; }
       await PF.signup(email, password);
       syncBackendUser();
-      showToast("Trial started — account created!", "success");
+      showToast('Account created — your 15-day trial has started!', 'success');
       transitionToWorkspace();
-    } catch (e) {
-      showToast(e.message, "error");
+    } else {
+      if (!password) { showToast('Please enter your password.', 'warn'); return; }
+      await PF.login(email, password);
+      syncBackendUser();
+      showToast('Signed in!', 'success');
+      transitionToWorkspace();
     }
-    return;
+  } catch (e) {
+    // Guide the user between modes when the failure suggests the other one.
+    if (authMode === 'signin' && /invalid email or password/i.test(e.message)) {
+      showToast("Invalid email or password. New here? Switch to “Create account”.", 'error');
+    } else if (authMode === 'signup' && /already exists/i.test(e.message)) {
+      showToast('That email already has an account — switching you to Sign in.', 'warn');
+      setAuthMode('signin');
+    } else {
+      showToast(e.message, 'error');
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = restore; }
   }
-
-  let trialStart = localStorage.getItem(STORAGE_KEYS.TRIAL_START);
-  if (!trialStart) {
-    trialStart = new Date().toISOString();
-    localStorage.setItem(STORAGE_KEYS.TRIAL_START, trialStart);
-  }
-  localStorage.setItem(STORAGE_KEYS.PLAN, 'trial');
-  appState.plan = 'trial';
-
-  showToast("Trial started. Connect API key in dashboard anytime.", "success");
-  transitionToWorkspace();
 }
+
+// Back-compat aliases (older callers / window.app exports). Function
+// declarations so they're hoisted for the early window.app export object.
+function handleAuthSubmit() { return submitAuth(); }
+function startFreeTrialAuth() { setAuthMode('signup'); return submitAuth(); }
 
 function transitionToWorkspace() {
   hideAuthModal();

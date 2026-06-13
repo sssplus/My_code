@@ -100,9 +100,9 @@
       if (d.user) { state.user = d.user; PF.session = { token: state.token, user: d.user }; }
       return d.user;
     },
-    async callAI(systemPrompt, userPrompt, provider) {
-      const d = await api('/api/ai', { method: 'POST', body: { systemPrompt, userPrompt, provider } });
-      if (state.user && typeof d.usageToday === 'number') state.user.usageToday = d.usageToday;
+    async callAI(systemPrompt, userPrompt, provider, feature) {
+      const d = await api('/api/ai', { method: 'POST', body: { systemPrompt, userPrompt, provider, feature } });
+      if (state.user && d.usage) state.user.usage = d.usage;
       return d.text;
     }
   };
