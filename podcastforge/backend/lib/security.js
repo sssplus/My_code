@@ -109,9 +109,31 @@ function decryptKey(blob) {
   }
 }
 
+/* ---- generic signed, expiring payloads (used for OAuth CSRF state) ---- */
+function signData(obj, ttlSeconds = 600) {
+  const payload = b64url(JSON.stringify({ d: obj, exp: Date.now() + ttlSeconds * 1000 }));
+  const sig = b64url(crypto.createHmac('sha256', SECRET).update(payload).digest());
+  return `${payload}.${sig}`;
+}
+
+function verifyData(token) {
+  if (typeof token !== 'string' || !token.includes('.')) return null;
+  const [payload, sig] = token.split('.');
+  const expected = b64url(crypto.createHmac('sha256', SECRET).update(payload).digest());
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  let parsed;
+  try { parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')); }
+  catch (e) { return null; }
+  if (!parsed || typeof parsed.exp !== 'number' || Date.now() > parsed.exp) return null;
+  return parsed.d;
+}
+
 module.exports = {
   hashPassword, verifyPassword,
   signToken, verifyToken,
+  signData, verifyData,
   encryptKey, decryptKey,
   newId: () => crypto.randomUUID()
 };

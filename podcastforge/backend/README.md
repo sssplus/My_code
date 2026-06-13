@@ -62,6 +62,30 @@ Any host that runs Node works. A typical managed setup:
 4. **HTTPS** — required: users paste real API keys. Managed hosts give you TLS
    automatically; on a raw VPS put Caddy or nginx in front.
 
+## Social login (Google / GitHub)
+
+Email + password works out of the box. To enable OAuth:
+
+1. Set **`APP_URL`** to your canonical https origin (e.g. `https://app.you.com`).
+   OAuth stays disabled until this is set — the redirect origin is taken only
+   from `APP_URL`, never from request headers, so a spoofed `Host` can't redirect
+   the freshly issued session token to an attacker.
+2. **Google** — create an OAuth client at
+   <https://console.cloud.google.com/apis/credentials>, add redirect URI
+   `${APP_URL}/api/auth/google/callback`, set `GOOGLE_CLIENT_ID` /
+   `GOOGLE_CLIENT_SECRET`.
+3. **GitHub** — create an OAuth app at
+   <https://github.com/settings/developers>, set callback URL
+   `${APP_URL}/api/auth/github/callback`, set `GITHUB_CLIENT_ID` /
+   `GITHUB_CLIENT_SECRET`.
+
+`GET /api/health` reports which providers are live (`{ oauth: { google, github } }`),
+and the frontend enables the matching buttons automatically. After consent, the
+session token comes back in the URL **fragment** (never sent to servers/logs),
+is stored by the SPA, and the URL is scrubbed. Accounts are keyed by verified
+email, so signing in with Google/GitHub/email for the same address lands on one
+account.
+
 ## Trial behaviour
 
 A new signup gets **15 days of full (unlimited) access**, then flips to

@@ -23,6 +23,7 @@ const path = require('path');
 const sec = require('./lib/security');
 const store = require('./lib/store');
 const providers = require('./lib/providers');
+const oauth = require('./lib/oauth');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, '..');           // serves podcastforge/
@@ -246,6 +247,82 @@ function serveStatic(req, res) {
   });
 }
 
+/* ---- OAuth (Google / GitHub) ----
+   The OAuth origin is taken ONLY from the trusted APP_URL env var, never from
+   request headers (Host / X-Forwarded-*). Deriving it from headers would let an
+   attacker spoof Host and redirect the freshly minted session token to their
+   own origin. OAuth is therefore unavailable unless APP_URL is set. */
+function oauthOrigin() {
+  return process.env.APP_URL ? process.env.APP_URL.replace(/\/$/, '') : null;
+}
+function oauthReady(provider) {
+  return oauth.isConfigured(provider) && !!oauthOrigin();
+}
+
+function handleOAuthStart(req, res, provider) {
+  if (!oauthReady(provider)) {
+    return sendJSON(res, 400, { error: `${provider} login is not enabled on this server (set ${provider.toUpperCase()}_CLIENT_ID/SECRET and APP_URL).` });
+  }
+  const redirectUri = `${oauthOrigin()}/api/auth/${provider}/callback`;
+  const state = sec.signData({ p: provider }, 600); // signed + 10-min expiry (CSRF)
+  res.writeHead(302, { Location: oauth.authorizeUrl(provider, redirectUri, state), 'Cache-Control': 'no-store' });
+  res.end();
+}
+
+// On any failure, bounce back to the app with an error flag in the fragment
+// (fragments are never sent to servers, so nothing leaks in logs/Referer).
+function oauthFail(res, msg) {
+  res.writeHead(302, {
+    Location: `${oauthOrigin() || ''}/#auth_error=${encodeURIComponent(msg)}`,
+    'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer'
+  });
+  res.end();
+}
+
+async function findOrCreateOAuthUser(provider, email, providerId) {
+  let user = await store.getUserByEmail(email);
+  if (!user) {
+    user = await store.createUser({
+      id: sec.newId(),
+      email: store.normEmail(email),
+      oauth: { [provider]: providerId },
+      plan: null,
+      createdAt: new Date().toISOString(),
+      usage: { date: today(), count: 0 },
+      keys: {}
+    });
+  } else if (!user.oauth || user.oauth[provider] !== providerId) {
+    // link this provider to the existing account (same verified email)
+    user.oauth = Object.assign({}, user.oauth, { [provider]: providerId });
+    await store.saveUser(user);
+  }
+  return user;
+}
+
+async function handleOAuthCallback(req, res, provider, query) {
+  if (!oauthReady(provider)) return oauthFail(res, 'Login not configured.');
+  if (query.error) return oauthFail(res, query.error_description || query.error);
+  const st = sec.verifyData(query.state);
+  if (!st || st.p !== provider || !query.code) return oauthFail(res, 'Login session expired, please try again.');
+
+  try {
+    const redirectUri = `${oauthOrigin()}/api/auth/${provider}/callback`;
+    const accessToken = await oauth.exchangeCode(provider, query.code, redirectUri);
+    const { email, providerId } = await oauth.fetchProfile(provider, accessToken);
+    const user = await findOrCreateOAuthUser(provider, email, providerId);
+    const token = sec.signToken(user.id);
+    // Hand the session token back via the URL fragment (never sent to servers/
+    // Referer); the SPA reads it from the hash, stores it, and scrubs the URL.
+    res.writeHead(302, {
+      Location: `${oauthOrigin()}/#auth=${token}`,
+      'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer'
+    });
+    res.end();
+  } catch (e) {
+    oauthFail(res, e.message || 'Login failed.');
+  }
+}
+
 /* ---- router ---- */
 const server = http.createServer(async (req, res) => {
   const url = (req.url || '').split('?')[0];
@@ -253,12 +330,24 @@ const server = http.createServer(async (req, res) => {
 
   if (!url.startsWith('/api/')) return serveStatic(req, res);
 
+  const query = Object.fromEntries(new URLSearchParams((req.url.split('?')[1] || '')));
+
   try {
     if (url === '/api/health' && method === 'GET') {
-      return sendJSON(res, 200, { ok: true, providers: Object.keys(providers.PROVIDER_MODELS) });
+      return sendJSON(res, 200, {
+        ok: true,
+        providers: Object.keys(providers.PROVIDER_MODELS),
+        oauth: { google: oauthReady('google'), github: oauthReady('github') }
+      });
     }
     if (url === '/api/auth/signup' && method === 'POST') return await handleSignup(req, res);
     if (url === '/api/auth/login' && method === 'POST') return await handleLogin(req, res);
+
+    // ----- OAuth (unauthenticated) -----
+    let m = url.match(/^\/api\/auth\/(google|github)$/);
+    if (m && method === 'GET') return handleOAuthStart(req, res, m[1]);
+    m = url.match(/^\/api\/auth\/(google|github)\/callback$/);
+    if (m && method === 'GET') return await handleOAuthCallback(req, res, m[1], query);
 
     // ----- everything below requires auth -----
     const user = await authUser(req);

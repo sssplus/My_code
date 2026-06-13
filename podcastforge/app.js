@@ -380,6 +380,24 @@ function syncBackendUser() {
     els.badge.style.setProperty('--badge-color', '#10b981');
     els.apiKey.placeholder = 'Key stored securely on your account — paste a new one to replace it';
   }
+
+  // Pull the signed-in identity into the nav (user ID surfaced in the title).
+  const chip = document.getElementById('nav-account');
+  if (chip) {
+    chip.style.display = 'inline-flex';
+    chip.textContent = u.email;
+    chip.title = `User ID: ${u.id}`;
+  }
+  // Engine directive: show that the engine runs server-side under this account.
+  const note = document.getElementById('api-key-note');
+  if (note) {
+    const provs = u.providers || [];
+    note.innerHTML = `⚙️ <strong>Engine ready</strong> — signed in as ${escapeHTML(u.email)}. `
+      + (provs.length
+        ? `Requests run on our server under your account using your stored ${provs.map(escapeHTML).join(', ')} key${provs.length > 1 ? 's' : ''}.`
+        : `Add an API key above and it’s stored on your account, not in this browser.`);
+  }
+
   updateNavState();
   updateLocks();
 }
@@ -646,6 +664,7 @@ window.app = {
   showAuthModal,
   hideAuthModal,
   simulateSSO,
+  loginWithProvider,
   handleAuthSubmit,
   startFreeTrialAuth,
   transitionToWorkspace,
@@ -963,6 +982,17 @@ function hideAuthModal() {
   if (modal) modal.classList.remove('show');
 }
 
+// Real OAuth when a backend has it configured; simulated SSO for the static demo.
+function loginWithProvider(provider) {
+  const p = String(provider).toLowerCase();
+  if (window.PF && PF.hasBackend()) {
+    if (PF.oauthEnabled(p)) { PF.startOAuth(p); return; }
+    showToast(`${provider} login isn't enabled on this server. Use email sign-in, or set ${provider.toUpperCase()}_CLIENT_ID/SECRET.`, 'warn');
+    return;
+  }
+  simulateSSO(provider);
+}
+
 function simulateSSO(provider) {
   showToast(`Connected successfully with ${provider}!`, 'success');
   setTimeout(() => {
@@ -1058,6 +1088,8 @@ function signOut() {
   appState.apiKey = '';
   els.apiKey.value = '';
   els.apiKey.placeholder = 'Paste your Anthropic, Gemini, OpenRouter, or OpenAI API key here...';
+  const chip = document.getElementById('nav-account');
+  if (chip) chip.style.display = 'none';
   detectProvider();
 
   // Re-display landing view before transitioning back
@@ -1350,14 +1382,23 @@ document.addEventListener('click', (e) => {
 // reflect the server's plan/usage/keys and drop the user straight into the workspace.
 if (window.PF) {
   PF.ready.then((hasBackend) => {
-    if (hasBackend && PF.isAuthed()) {
+    if (!hasBackend) return;
+    if (PF.authError && PF.authError()) {
+      showToast('Sign-in failed: ' + PF.authError(), 'error');
+    }
+    if (PF.isAuthed()) {
       syncBackendUser();
+      if (PF.justAuthenticated && PF.justAuthenticated()) {
+        showToast(`Signed in as ${PF.session.user.email}`, 'success');
+      }
       if (sessionStorage.getItem('pf_view_state') !== 'workspace') {
         sessionStorage.setItem('pf_view_state', 'workspace');
         document.body.classList.add('view-state-workspace', 'workspace-active');
         const landingEl = document.getElementById('landing-view');
         if (landingEl) landingEl.style.display = 'none';
         updateNavLinks(true);
+        updateNavState();
+        updateLocks();
       }
     }
   });
