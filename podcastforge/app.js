@@ -250,12 +250,15 @@ function updateLocks() {
   const isLanding = sessionStorage.getItem('pf_view_state') === 'landing';
   const isFree = appState.plan === 'free' || appState.plan === 'expired' || isLanding;
 
+  const minerLock = document.getElementById('miner-lock');
   if (isFree) {
     els.toolsLock.style.display = 'flex';
     document.getElementById('tracker-lock').style.display = 'flex';
+    if (minerLock) minerLock.style.display = 'flex';
   } else {
     els.toolsLock.style.display = 'none';
     document.getElementById('tracker-lock').style.display = 'none';
+    if (minerLock) minerLock.style.display = 'none';
   }
 
   // Pro Upgrade button visibility in nav
