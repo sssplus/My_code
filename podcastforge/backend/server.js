@@ -62,11 +62,11 @@ function readBody(req) {
   });
 }
 
-function authUser(req) {
+async function authUser(req) {
   const h = req.headers['authorization'] || '';
   const token = h.startsWith('Bearer ') ? h.slice(7) : '';
   const uid = sec.verifyToken(token);
-  return uid ? store.getUserById(uid) : null;
+  return uid ? await store.getUserById(uid) : null;
 }
 
 const today = () => new Date().toISOString().split('T')[0];
@@ -107,9 +107,9 @@ async function handleSignup(req, res) {
   const { email, password } = await readBody(req);
   if (!EMAIL_RE.test(String(email || ''))) throw { status: 400, message: 'Enter a valid email address.' };
   if (String(password || '').length < 8) throw { status: 400, message: 'Password must be at least 8 characters.' };
-  if (store.getUserByEmail(email)) throw { status: 409, message: 'An account with that email already exists.' };
+  if (await store.getUserByEmail(email)) throw { status: 409, message: 'An account with that email already exists.' };
 
-  const user = store.createUser({
+  const user = await store.createUser({
     id: sec.newId(),
     email: store.normEmail(email),
     password: sec.hashPassword(password),
@@ -123,7 +123,7 @@ async function handleSignup(req, res) {
 
 async function handleLogin(req, res) {
   const { email, password } = await readBody(req);
-  const user = store.getUserByEmail(email);
+  const user = await store.getUserByEmail(email);
   // Same generic message whether the email is unknown or the password is wrong
   if (!user || !sec.verifyPassword(password, user.password)) {
     throw { status: 401, message: 'Invalid email or password.' };
@@ -142,7 +142,7 @@ async function handleSaveKey(req, res, user) {
   const provider = providers.detectProvider(k);
   user.keys = user.keys || {};
   user.keys[provider] = sec.encryptKey(k);
-  store.saveUser(user);
+  await store.saveUser(user);
   sendJSON(res, 200, { provider, providers: Object.keys(user.keys) });
 }
 
@@ -150,8 +150,8 @@ function handleListKeys(req, res, user) {
   sendJSON(res, 200, { providers: Object.keys(user.keys || {}) });
 }
 
-function handleDeleteKey(req, res, user, provider) {
-  if (user.keys && user.keys[provider]) { delete user.keys[provider]; store.saveUser(user); }
+async function handleDeleteKey(req, res, user, provider) {
+  if (user.keys && user.keys[provider]) { delete user.keys[provider]; await store.saveUser(user); }
   sendJSON(res, 200, { ok: true, providers: Object.keys(user.keys || {}) });
 }
 
@@ -184,7 +184,7 @@ async function handleAI(req, res, user) {
     const t = today();
     user.usage = user.usage && user.usage.date === t ? user.usage : { date: t, count: 0 };
     user.usage.count++;
-    store.saveUser(user);
+    await store.saveUser(user);
   }
   sendJSON(res, 200, { text, provider, usageToday: user.usage ? user.usage.count : 0 });
 }
@@ -216,7 +216,7 @@ async function handleCheckout(req, res, user) {
   }
 
   user.plan = plan;
-  store.saveUser(user);
+  await store.saveUser(user);
   sendJSON(res, 200, { ok: true, user: publicUser(user), mock: !billingConfigured });
 }
 
@@ -261,14 +261,16 @@ const server = http.createServer(async (req, res) => {
     if (url === '/api/auth/login' && method === 'POST') return await handleLogin(req, res);
 
     // ----- everything below requires auth -----
-    const user = authUser(req);
+    const user = await authUser(req);
     if (!user) throw { status: 401, message: 'Please sign in.' };
+
+    if (url === '/api/keys/' && method === 'DELETE') throw { status: 400, message: 'Provider required.' };
 
     if (url === '/api/auth/me' && method === 'GET') return handleMe(req, res, user);
     if (url === '/api/keys' && method === 'GET') return handleListKeys(req, res, user);
     if (url === '/api/keys' && method === 'POST') return await handleSaveKey(req, res, user);
     if (url.startsWith('/api/keys/') && method === 'DELETE') {
-      return handleDeleteKey(req, res, user, url.slice('/api/keys/'.length));
+      return await handleDeleteKey(req, res, user, decodeURIComponent(url.slice('/api/keys/'.length)));
     }
     if (url === '/api/ai' && method === 'POST') return await handleAI(req, res, user);
     if (url === '/api/billing/checkout' && method === 'POST') return await handleCheckout(req, res, user);
@@ -282,9 +284,30 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`PodcastForge backend on http://localhost:${PORT}`);
-  console.log(`Serving frontend from ${PUBLIC_DIR}`);
-});
+// Production safety: refuse to boot without an explicit secret, so a redeploy
+// can never silently rotate it and invalidate every stored key + session.
+if (process.env.NODE_ENV === 'production' && !process.env.PF_SECRET) {
+  console.error('[fatal] NODE_ENV=production but PF_SECRET is not set. Refusing to start.');
+  console.error('        Set PF_SECRET to a long random string (e.g. `openssl rand -hex 32`).');
+  process.exit(1);
+}
+
+async function start() {
+  try {
+    await store.init();
+    console.log(`[store] backend: ${store.usingPostgres ? 'Postgres (DATABASE_URL)' : 'JSON file (data/db.json)'}`);
+  } catch (e) {
+    console.error('[fatal] store init failed:', e.message);
+    process.exit(1);
+  }
+  server.listen(PORT, () => {
+    console.log(`PodcastForge backend on http://localhost:${PORT}`);
+    console.log(`Serving frontend from ${PUBLIC_DIR}`);
+  });
+}
+
+// Start unless being required by a test harness that drives init itself.
+if (require.main === module) start();
 
 module.exports = server;
+module.exports.start = start;
