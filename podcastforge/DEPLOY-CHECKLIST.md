@@ -49,6 +49,17 @@ Set these on your host (see `backend/.env.example`):
 - After expiry, the **Free** plan still works with per-day caps (server-enforced):
   generations 5, Script Studio 5, Miner 10 sections, AI Stack audits 2,
   Auto-Repurpose agent 8 calls (~1 run), Music briefs 5, chat 15.
+- Tools (each its own routed page, e.g. `/#/agent`): Generator, Auto-Repurpose
+  Agent, Discover (podcast search), Transcripts (RSS transcript puller),
+  Script Studio, Content Miner, AI Stack Tracker, Background Music Brief,
+  Cover templates (PNG export), and an Account panel (usage/history/keys).
+
+## Network egress
+The server makes outbound calls to: the AI providers, Apple iTunes
+(`itunes.apple.com`) for Discover, and arbitrary podcast RSS/transcript URLs for
+the transcript puller. If your host restricts egress, allow general HTTPS out.
+Podcast fetches are SSRF-guarded (private/loopback/link-local/metadata IPs are
+blocked, redirects re-validated, connection pinned to a validated public IP).
 
 ## Security posture (already in place)
 - Passwords: scrypt + per-user salt. Sessions: signed, expiring HMAC tokens.
