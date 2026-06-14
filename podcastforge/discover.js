@@ -75,8 +75,9 @@
       if (state.filtered > 0) html += `<div class="dc-note">${state.filtered} explicit-flagged result${state.filtered > 1 ? 's' : ''} hidden.</div>`;
       html += `<div class="dc-grid">`;
       results.forEach((r, i) => {
+        const art = /^https?:\/\//i.test(r.artwork) ? r.artwork : '';
         html += `<div class="dc-pod">
-          <div class="dc-art" style="background-image:url('${esc(r.artwork)}')"></div>
+          ${art ? `<img class="dc-art" src="${esc(art)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<div class="dc-art"></div>'}
           <div class="dc-info">
             <div class="dc-name" title="${esc(r.name)}">${esc(r.name)}</div>
             <div class="dc-artist">${esc(r.artist)}</div>
@@ -123,7 +124,7 @@
       .dc-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px; }
       .dc-pod { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-md); overflow:hidden; transition:.15s; }
       .dc-pod:hover { border-color:var(--accent-cyan2); transform:translateY(-2px); }
-      .dc-art { width:100%; aspect-ratio:1/1; background:var(--bg-input) center/cover no-repeat; }
+      .dc-art { width:100%; aspect-ratio:1/1; background:var(--bg-input); object-fit:cover; display:block; }
       .dc-info { padding:12px 14px; }
       .dc-name { font:600 13.5px/1.3 inherit; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
       .dc-artist { font:400 12px/1.4 inherit; color:var(--text-secondary); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
