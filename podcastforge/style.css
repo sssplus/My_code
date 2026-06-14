@@ -1593,3 +1593,48 @@ footer { border-top: 1px solid var(--border); padding: 32px 40px; display: flex;
   border-radius: 2px;
 }
 @media (prefers-reduced-motion: reduce) { .ws-anim { animation: none; } }
+
+/* ============================================================
+   v2.4 — Workspace layout + scroll affordance fixes
+   ============================================================ */
+
+/* Marketing Pricing + footer must NOT bleed into the routed app workspace.
+   They belong to the landing page only; in-app upgrades use the paywall modal. */
+.workspace-active #pricing,
+.workspace-active footer { display: none !important; }
+
+/* Cap + scroll all tool input boxes so none stretch the page. */
+.ag-input, .mn-input, .mu-input { max-height: 300px; overflow-y: auto; }
+
+/* Make scrollbars clearly visible inside workspace boxes (the old 5px sliver
+   read as "no scrolling"). Firefox + WebKit. */
+textarea#transcript, .ag-input, .mn-input, .mu-input, .tr-input,
+#chat-history, .tr-out, .st-out, .ag-text, .mn-draft-out, .output-content {
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent-violet2) var(--bg-input);
+}
+textarea#transcript::-webkit-scrollbar,
+.ag-input::-webkit-scrollbar, .mn-input::-webkit-scrollbar, .mu-input::-webkit-scrollbar,
+.tr-input::-webkit-scrollbar, #chat-history::-webkit-scrollbar, .tr-out::-webkit-scrollbar,
+.st-out::-webkit-scrollbar, .ag-text::-webkit-scrollbar, .mn-draft-out::-webkit-scrollbar,
+.output-content::-webkit-scrollbar {
+  width: 12px;
+}
+textarea#transcript::-webkit-scrollbar-track,
+.ag-input::-webkit-scrollbar-track, .mn-input::-webkit-scrollbar-track, .mu-input::-webkit-scrollbar-track,
+.tr-input::-webkit-scrollbar-track, #chat-history::-webkit-scrollbar-track, .tr-out::-webkit-scrollbar-track,
+.st-out::-webkit-scrollbar-track, .ag-text::-webkit-scrollbar-track, .mn-draft-out::-webkit-scrollbar-track,
+.output-content::-webkit-scrollbar-track {
+  background: var(--bg-input); border-radius: 6px;
+}
+textarea#transcript::-webkit-scrollbar-thumb,
+.ag-input::-webkit-scrollbar-thumb, .mn-input::-webkit-scrollbar-thumb, .mu-input::-webkit-scrollbar-thumb,
+.tr-input::-webkit-scrollbar-thumb, #chat-history::-webkit-scrollbar-thumb, .tr-out::-webkit-scrollbar-thumb,
+.st-out::-webkit-scrollbar-thumb, .ag-text::-webkit-scrollbar-thumb, .mn-draft-out::-webkit-scrollbar-thumb,
+.output-content::-webkit-scrollbar-thumb {
+  background: var(--accent-violet); border-radius: 6px; border: 2px solid var(--bg-input);
+}
+textarea#transcript::-webkit-scrollbar-thumb:hover,
+.ag-input::-webkit-scrollbar-thumb:hover, .mn-input::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-violet2);
+}

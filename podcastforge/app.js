@@ -671,6 +671,7 @@ window.app = {
   hideAuthModal,
   openAccount,
   closeAccount,
+  onPricingNav,
   acSetCurrency,
   removeProviderKey,
   simulateSSO,
@@ -1111,6 +1112,17 @@ async function openAccount() {
   }
 }
 function closeAccount() { document.getElementById('account-modal')?.classList.remove('show'); }
+
+// In the workspace the marketing Pricing section is hidden, so the nav "Pricing"
+// link opens the paywall modal instead of scrolling to a hidden anchor.
+function onPricingNav(e) {
+  if (document.body.classList.contains('workspace-active')) {
+    if (e) e.preventDefault();
+    showPaywall();
+    return false;
+  }
+  return true;
+}
 
 function renderAccount(d) {
   const u = d.user, e = escapeHTML;
@@ -1659,6 +1671,22 @@ if (window.PF) {
     }
   });
 }
+
+// Auto-grow the main text boxes to fit content up to their CSS max-height, then
+// scroll. Keeps boxes from looking stretched/empty and makes overflow obvious.
+// Delegated so it also covers tool textareas rendered later (agent/miner/music).
+const AUTOGROW_IDS = new Set(['transcript', 'ag-input', 'mn-input', 'mu-input']);
+function autoGrow(t) {
+  if (!t || t.tagName !== 'TEXTAREA') return;
+  const max = parseInt(getComputedStyle(t).maxHeight, 10) || 380;
+  t.style.height = 'auto';
+  const h = Math.min(t.scrollHeight, max);
+  t.style.height = h + 'px';
+  t.style.overflowY = t.scrollHeight > max ? 'auto' : 'hidden';
+}
+document.addEventListener('input', (e) => {
+  if (e.target && AUTOGROW_IDS.has(e.target.id)) autoGrow(e.target);
+});
 
 // Run Init
 initAuth();
