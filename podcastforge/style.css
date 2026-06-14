@@ -1579,3 +1579,17 @@ footer { border-top: 1px solid var(--border); padding: 32px 40px; display: flex;
 .ac-hist-p { flex: 1; min-width: 0; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ac-hist-t { color: var(--text-muted); flex-shrink: 0; font-size: 11px; }
 .ac-mock { font-size: 9px; background: rgba(245,158,11,0.15); color: var(--accent-amber); border-radius: 3px; padding: 2px 5px; vertical-align: middle; }
+
+/* ── Workspace router: one tool per page with transitions ── */
+.workspace-active .ws-page { display: none; }
+.workspace-active .ws-page.ws-active { display: block; }
+.ws-anim { animation: wsPageIn 0.45s cubic-bezier(0.25, 1, 0.5, 1); }
+@keyframes wsPageIn { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+.nav-route { position: relative; }
+.nav-route.nav-active { color: var(--text-primary); }
+.nav-route.nav-active::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -6px; height: 2px;
+  background: linear-gradient(90deg, var(--accent-violet), var(--accent-cyan));
+  border-radius: 2px;
+}
+@media (prefers-reduced-motion: reduce) { .ws-anim { animation: none; } }

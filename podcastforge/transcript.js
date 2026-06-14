@@ -57,8 +57,8 @@
     if (el) {
       el.value = state.transcript;
       el.dispatchEvent(new Event('input'));
-      const section = where === 'generator' ? 'app' : where === 'miner' ? 'miner' : 'agent';
-      document.getElementById(section)?.scrollIntoView({ behavior: 'smooth' });
+      if (window.pfRouter) pfRouter.go(where);            // navigate to that tool's page
+      else document.getElementById(where === 'generator' ? 'app' : where)?.scrollIntoView({ behavior: 'smooth' });
       if (window.app && window.app.showToast) window.app.showToast(`Transcript loaded into the ${where}.`, 'success');
     }
   }
@@ -163,7 +163,8 @@
     state.feedUrl = feedUrl;
     const input = document.getElementById('tr-feed');
     if (input) input.value = feedUrl;
-    document.getElementById('transcripts')?.scrollIntoView({ behavior: 'smooth' });
+    if (window.pfRouter) pfRouter.go('transcripts');
+    else document.getElementById('transcripts')?.scrollIntoView({ behavior: 'smooth' });
     loadEpisodes();
   };
   window.transcriptPull = pull;

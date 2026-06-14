@@ -1260,7 +1260,11 @@ function transitionToWorkspace() {
     updateLocks();
     sessionStorage.setItem('pf_view_state', 'workspace');
 
-    // Scroll to the top of the workspace view
+    // Show a workspace page (honour a deep-linked route, else the default).
+    if (window.pfRouter) {
+      const r = (location.hash.match(/^#\/([a-z]+)/i) || [])[1] || '';
+      pfRouter.go(r);
+    }
     window.scrollTo({ top: 0, behavior: 'auto' });
     window.dispatchEvent(new Event('resize'));
   }, 800);
@@ -1268,6 +1272,8 @@ function transitionToWorkspace() {
 
 function signOut() {
   if (window.PF && PF.isAuthed()) PF.logout();
+  // Drop any workspace route so we return cleanly to the landing page.
+  if (location.hash.startsWith('#/')) history.replaceState(null, '', location.pathname + location.search);
   localStorage.removeItem(STORAGE_KEYS.API_KEY);
   appState.apiKey = '';
   els.apiKey.value = '';
@@ -1607,6 +1613,7 @@ document.addEventListener('click', (e) => {
 
   const href = anchor.getAttribute('href');
   if (href === '#' || href === '') return;
+  if (href.startsWith('#/')) return; // workspace routes are handled by the router
 
   const target = document.querySelector(href);
   if (target) {
@@ -1643,6 +1650,11 @@ if (window.PF) {
         updateNavLinks(true);
         updateNavState();
         updateLocks();
+      }
+      // Render the routed workspace page (deep link or default).
+      if (window.pfRouter) {
+        const r = (location.hash.match(/^#\/([a-z]+)/i) || [])[1] || '';
+        pfRouter.go(r);
       }
     }
   });

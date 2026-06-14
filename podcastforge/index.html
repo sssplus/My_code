@@ -23,14 +23,15 @@
     <div class="nav-links" id="navbar-links">
       <a href="#landing-hero" class="nav-landing-only">Home</a>
       <a href="#landing-features" class="nav-landing-only">Features</a>
-      <a href="#discover" class="nav-workspace-only" style="display: none;">Discover</a>
-      <a href="#transcripts" class="nav-workspace-only" style="display: none;">Transcripts</a>
-      <a href="#studio" class="nav-workspace-only" style="display: none;">Script Studio</a>
-      <a href="#app" class="nav-workspace-only" style="display: none;">Generator</a>
-      <a href="#agent" class="nav-workspace-only" style="display: none;">Agent</a>
-      <a href="#miner" class="nav-workspace-only" style="display: none;">Miner</a>
-      <a href="#tools" class="nav-workspace-only" style="display: none;">AI Stack Tracker</a>
-      <a href="#music" class="nav-workspace-only" style="display: none;">Music</a>
+      <a href="#/generator" class="nav-workspace-only nav-route" style="display: none;">Generator</a>
+      <a href="#/agent" class="nav-workspace-only nav-route" style="display: none;">Agent</a>
+      <a href="#/discover" class="nav-workspace-only nav-route" style="display: none;">Discover</a>
+      <a href="#/transcripts" class="nav-workspace-only nav-route" style="display: none;">Transcripts</a>
+      <a href="#/studio" class="nav-workspace-only nav-route" style="display: none;">Script Studio</a>
+      <a href="#/miner" class="nav-workspace-only nav-route" style="display: none;">Miner</a>
+      <a href="#/tracker" class="nav-workspace-only nav-route" style="display: none;">Tracker</a>
+      <a href="#/music" class="nav-workspace-only nav-route" style="display: none;">Music</a>
+      <a href="#/templates" class="nav-workspace-only nav-route" style="display: none;">Covers</a>
       <a href="#pricing">Pricing</a>
     </div>
     <div class="nav-right">
@@ -170,7 +171,7 @@
     </div>
 
     <!-- Podcast Cover Templates -->
-    <div style="max-width: 1140px; margin: 0 auto; padding: 30px 24px 10px;">
+    <div id="templates" class="ws-page" data-route="templates" style="max-width: 1140px; margin: 0 auto; padding: 30px 24px 10px;">
       <div class="templates-section">
         <div class="templates-header">
           <div class="section-label" style="color: var(--accent-cyan);">Creative Assets</div>
@@ -225,7 +226,7 @@
     </div>
 
     <!-- Discover Podcasts Section -->
-    <section id="discover" style="max-width:1140px; margin:0 auto; padding:30px 24px 10px;">
+    <section id="discover" class="ws-page" data-route="discover" style="max-width:1140px; margin:0 auto; padding:30px 24px 10px;">
       <div style="text-align:center; margin-bottom:28px;">
         <div class="section-label" style="color:var(--accent-cyan);">Discover</div>
         <h2 class="section-title" style="font-size:24px;">Find Podcasts by Field</h2>
@@ -237,7 +238,7 @@
     </section>
 
     <!-- Transcript Puller Section -->
-    <section id="transcripts" style="max-width:1140px; margin:0 auto; padding:30px 24px 10px;">
+    <section id="transcripts" class="ws-page" data-route="transcripts" style="max-width:1140px; margin:0 auto; padding:30px 24px 10px;">
       <div style="text-align:center; margin-bottom:28px;">
         <div class="section-label" style="color:var(--accent-cyan);">Source Text</div>
         <h2 class="section-title" style="font-size:24px;">Pull a Transcript</h2>
@@ -249,7 +250,7 @@
     </section>
 
     <!-- Script Studio Section -->
-    <section id="studio" style="max-width:1140px; margin:0 auto; padding:30px 24px 10px;">
+    <section id="studio" class="ws-page" data-route="studio" style="max-width:1140px; margin:0 auto; padding:30px 24px 10px;">
       <div style="text-align:center; margin-bottom:28px;">
         <div class="section-label" style="color:var(--accent-violet2);">Script Studio</div>
         <h2 class="section-title" style="font-size:24px;">Pro Script &amp; Video Prompt Templates</h2>
@@ -261,7 +262,7 @@
     </section>
 
     <!-- App Section -->
-    <section id="app">
+    <section id="app" class="ws-page" data-route="generator">
       <div class="api-bar">
         <div class="api-icon">🔑</div>
         <input type="password" id="api-key-input" placeholder="Paste your Anthropic, Gemini, OpenRouter, or OpenAI API key here..." autocomplete="off" spellcheck="false">
@@ -353,7 +354,7 @@
       </div>
     </section>
     <!-- Auto-Repurpose Agent Section -->
-    <section id="agent" style="max-width:1140px; margin:0 auto; padding:10px 24px;">
+    <section id="agent" class="ws-page" data-route="agent" style="max-width:1140px; margin:0 auto; padding:10px 24px;">
       <div style="text-align:center; margin-bottom:28px;">
         <div class="section-label" style="color:var(--accent-violet2);">One-click</div>
         <h2 class="section-title" style="font-size:24px;">Auto-Repurpose Agent</h2>
@@ -371,7 +372,7 @@
     </section>
 
     <!-- Long-Episode Content Miner Section (inside workspace: shown after login) -->
-    <section id="miner">
+    <section id="miner" class="ws-page" data-route="miner">
       <div style="text-align:center; margin-bottom:40px;">
         <div class="section-label">The Engine</div>
         <h2 class="section-title">Long-Episode Content Miner</h2>
@@ -399,7 +400,7 @@
     </section>
 
     <!-- AI Stack Tracker Section -->
-    <section id="tools">
+    <section id="tools" class="ws-page" data-route="tracker">
       <div style="text-align: center; margin-bottom: 40px;">
         <div class="section-label">Bonus Tool</div>
         <h2 class="section-title">AI Stack Tracker</h2>
@@ -420,7 +421,7 @@
     </section>
 
     <!-- Background Music Brief Section -->
-    <section id="music" style="max-width:1140px; margin:0 auto; padding:10px 24px 60px;">
+    <section id="music" class="ws-page" data-route="music" style="max-width:1140px; margin:0 auto; padding:10px 24px 60px;">
       <div style="text-align:center; margin-bottom:28px;">
         <div class="section-label" style="color:var(--accent-cyan);">Creative Assets</div>
         <h2 class="section-title" style="font-size:24px;">Background Music Brief</h2>
@@ -656,5 +657,6 @@
   <script src="music.js"></script>
   <script src="discover.js"></script>
   <script src="transcript.js"></script>
+  <script src="router.js"></script>
 </body>
 </html>

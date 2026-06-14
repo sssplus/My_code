@@ -165,8 +165,9 @@
     const ta = document.getElementById('transcript');
     if (!ta) return;
     ta.value = fill(t.user, state.values[id] || {});
-    if (window.app?.showToast) window.app.showToast('Loaded into the Generator below ↓', 'info');
-    document.getElementById('app')?.scrollIntoView({ behavior: 'smooth' });
+    if (window.app?.showToast) window.app.showToast('Loaded into the Generator.', 'info');
+    if (window.pfRouter) pfRouter.go('generator');
+    else document.getElementById('app')?.scrollIntoView({ behavior: 'smooth' });
   }
 
   function injectStyles() {
