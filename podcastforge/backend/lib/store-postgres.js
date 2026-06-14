@@ -45,10 +45,16 @@ async function getUserByEmail(email) {
 }
 
 async function createUser(user) {
-  await pool.query(
-    'INSERT INTO users (id, email, data) VALUES ($1, $2, $3)',
-    [user.id, normEmail(user.email), JSON.stringify(user)]
-  );
+  try {
+    await pool.query(
+      'INSERT INTO users (id, email, data) VALUES ($1, $2, $3)',
+      [user.id, normEmail(user.email), JSON.stringify(user)]
+    );
+  } catch (e) {
+    // 23505 = unique_violation: a concurrent signup raced the email check.
+    if (e && e.code === '23505') throw { status: 409, message: 'An account with that email already exists.' };
+    throw e;
+  }
   return user;
 }
 

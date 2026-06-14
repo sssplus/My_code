@@ -165,6 +165,7 @@
     const ta = document.getElementById('transcript');
     if (!ta) return;
     ta.value = fill(t.user, state.values[id] || {});
+    ta.dispatchEvent(new Event('input', { bubbles: true })); // trigger auto-grow
     if (window.app?.showToast) window.app.showToast('Loaded into the Generator.', 'info');
     if (window.pfRouter) pfRouter.go('generator');
     else document.getElementById('app')?.scrollIntoView({ behavior: 'smooth' });
@@ -238,6 +239,7 @@
       const ta = document.getElementById('transcript');
       if (t && ta) {
         ta.value = fill(t.user, {});
+        ta.dispatchEvent(new Event('input', { bubbles: true })); // trigger auto-grow
         if (window.app && window.app.showToast) window.app.showToast('Template scaffold loaded — fill in the blanks below.', 'info');
         ta.focus();
       }

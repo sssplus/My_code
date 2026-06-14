@@ -29,11 +29,15 @@ const rss = require('./lib/rss');
 
 // Conservative NSFW guard for pulled podcasts (in addition to the iTunes/RSS
 // explicit flags). Kept tight to avoid flagging legitimate shows.
-const NSFW_TERMS = ['xxx', 'hardcore porn', 'pornhub', 'onlyfans', 'nsfw', 'explicit sex', 'erotica', 'camgirl', 'fetish'];
+// Word-boundary patterns (not substring) so legitimate titles like
+// "Fetishizing productivity" or a literary discussion of "erotica" aren't
+// false-positive blocked. The primary gate is still the itunes:explicit flag
+// and adult category; this is a backstop for unambiguous adult terms.
+const NSFW_PATTERNS = [/\bxxx\b/i, /\bhardcore\s+porn\b/i, /\bpornhub\b/i, /\bonlyfans\b/i, /\bnsfw\b/i, /\bexplicit\s+sex\b/i, /\bcamgirl\b/i, /\bporn\b/i];
 const NSFW_CATEGORIES = ['sexually explicit', 'adult'];
 function looksNSFW(text) {
-  const t = String(text || '').toLowerCase();
-  return NSFW_TERMS.some(w => t.includes(w));
+  const t = String(text || '');
+  return NSFW_PATTERNS.some(re => re.test(t));
 }
 
 const PORT = process.env.PORT || 3000;

@@ -56,7 +56,7 @@
     const el = document.getElementById(id);
     if (el) {
       el.value = state.transcript;
-      el.dispatchEvent(new Event('input'));
+      el.dispatchEvent(new Event('input', { bubbles: true })); // bubbles so the delegated auto-grow fires
       if (window.pfRouter) pfRouter.go(where);            // navigate to that tool's page
       else document.getElementById(where === 'generator' ? 'app' : where)?.scrollIntoView({ behavior: 'smooth' });
       if (window.app && window.app.showToast) window.app.showToast(`Transcript loaded into the ${where}.`, 'success');
@@ -116,7 +116,10 @@
 
     root.innerHTML = html + (document.getElementById('transcript-lock')?.outerHTML || '');
     const input = document.getElementById('tr-feed');
-    if (input) input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); loadEpisodes(); } });
+    if (input) {
+      input.addEventListener('input', (e) => { state.feedUrl = e.target.value; }); // keep state in sync so re-renders don't drop typing
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); loadEpisodes(); } });
+    }
     const btn = document.getElementById('tr-load');
     if (btn) btn.addEventListener('click', loadEpisodes);
   }

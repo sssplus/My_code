@@ -378,12 +378,22 @@ function syncBackendUser() {
       date: new Date().toISOString().split('T')[0], count: u.usageToday || 0
     }));
   }
-  if ((u.providers || []).length && appState.provider === 'none') {
-    appState.provider = u.providers[0];
-    els.badge.className = 'provider-badge active';
-    els.badge.textContent = `🔒 Key stored (${u.providers[0]})`;
-    els.badge.style.setProperty('--badge-color', '#10b981');
-    els.apiKey.placeholder = 'Key stored securely on your account — paste a new one to replace it';
+  // Reflect the account's stored keys in the provider badge — but never clobber
+  // a key the user has just typed into the bar. Handles add / switch / remove.
+  const provs = u.providers || [];
+  if (!(appState.apiKey || '').trim()) {
+    if (provs.length) {
+      if (!provs.includes(appState.provider)) appState.provider = provs[0];
+      els.badge.className = 'provider-badge active';
+      els.badge.textContent = `🔒 Key stored (${appState.provider})`;
+      els.badge.style.setProperty('--badge-color', '#10b981');
+      els.apiKey.placeholder = 'Key stored securely on your account — paste a new one to replace it';
+    } else {
+      appState.provider = 'none';
+      els.badge.className = 'provider-badge none';
+      els.badge.textContent = 'No key detected';
+      els.apiKey.placeholder = 'Paste your Anthropic, Gemini, OpenRouter, or OpenAI API key here...';
+    }
   }
 
   // Pull the signed-in identity into the nav (user ID surfaced in the title).
@@ -1438,32 +1448,32 @@ function downloadTemplate() {
     a.href = href; a.download = `podcast-cover-${theme}.${ext}`;
     document.body.appendChild(a); a.click(); a.remove();
   };
-
-  const img = new Image();
-  img.onload = () => {
-    try {
-      const c = document.createElement('canvas');
-      c.width = 1400; c.height = 1400;
-      c.getContext('2d').drawImage(img, 0, 0, 1400, 1400);
-      c.toBlob((b) => {
-        if (!b) throw new Error('no blob');
-        const pngUrl = URL.createObjectURL(b);
-        triggerDownload(pngUrl, 'png');
-        setTimeout(() => { URL.revokeObjectURL(pngUrl); URL.revokeObjectURL(svgUrl); }, 1000);
-        showToast('Cover downloaded as PNG.', 'success');
-        hideTemplate();
-      }, 'image/png');
-    } catch (err) {
-      triggerDownload(svgUrl, 'svg');
-      showToast('Cover downloaded as SVG.', 'success');
-      hideTemplate();
-    }
-  };
-  img.onerror = () => {
+  const fallbackSVG = () => {
     triggerDownload(svgUrl, 'svg');
+    setTimeout(() => URL.revokeObjectURL(svgUrl), 1000);
     showToast('Cover downloaded as SVG.', 'success');
     hideTemplate();
   };
+
+  const img = new Image();
+  img.onload = () => {
+    let c;
+    try {
+      c = document.createElement('canvas');
+      c.width = 1400; c.height = 1400;
+      c.getContext('2d').drawImage(img, 0, 0, 1400, 1400);
+    } catch (err) { fallbackSVG(); return; }
+    // toBlob is async — handle null inside the callback (a throw here would be uncaught).
+    c.toBlob((b) => {
+      if (!b) { fallbackSVG(); return; }
+      const pngUrl = URL.createObjectURL(b);
+      triggerDownload(pngUrl, 'png');
+      setTimeout(() => { URL.revokeObjectURL(pngUrl); URL.revokeObjectURL(svgUrl); }, 1000);
+      showToast('Cover downloaded as PNG.', 'success');
+      hideTemplate();
+    }, 'image/png');
+  };
+  img.onerror = fallbackSVG;
   img.src = svgUrl;
 }
 
@@ -1675,7 +1685,7 @@ if (window.PF) {
 // Auto-grow the main text boxes to fit content up to their CSS max-height, then
 // scroll. Keeps boxes from looking stretched/empty and makes overflow obvious.
 // Delegated so it also covers tool textareas rendered later (agent/miner/music).
-const AUTOGROW_IDS = new Set(['transcript', 'ag-input', 'mn-input', 'mu-input']);
+const AUTOGROW_IDS = new Set(['transcript', 'ag-input', 'miner-input', 'mu-input']);
 function autoGrow(t) {
   if (!t || t.tagName !== 'TEXTAREA') return;
   const max = parseInt(getComputedStyle(t).maxHeight, 10) || 380;

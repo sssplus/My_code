@@ -101,6 +101,7 @@
     }
 
     // DRAFT each planned piece
+    let failed = 0;
     for (let i = 0; i < plan.length; i++) {
       const piece = plan[i];
       const meta = FORMATS[piece.format];
@@ -128,9 +129,14 @@
           break;
         }
         setStep(stepIdx, { status: 'error', note: e.message });
+        failed++;
       }
     }
 
+    // Surface a summary if some pieces failed but the run wasn't cap-stopped.
+    if (failed > 0 && !state.error) {
+      state.error = `${failed} of ${plan.length} piece${plan.length > 1 ? 's' : ''} couldn't be drafted (see steps above). The rest are below.`;
+    }
     state.running = false;
     render();
   }

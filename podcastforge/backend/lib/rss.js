@@ -39,9 +39,27 @@ function parseFeed(xml) {
   let im;
   while ((im = itemRe.exec(xml)) && items.length < 60) {
     const it = im[1];
+    // An item may list several transcripts (html, json, srt, vtt…). Prefer the
+    // machine-readable formats over an HTML transcript web page.
     let transcriptUrl = '', transcriptType = '';
-    const tr = it.match(/<podcast:transcript\b[^>]*>/i);
-    if (tr) { transcriptUrl = attr(tr[0], 'url'); transcriptType = attr(tr[0], 'type') || attr(tr[0], 'mimetype'); }
+    const trTags = it.match(/<podcast:transcript\b[^>]*>/gi) || [];
+    const rank = (ty) => {
+      const t = (ty || '').toLowerCase();
+      if (t.includes('json')) return 0;
+      if (t.includes('vtt')) return 1;
+      if (t.includes('srt') || t.includes('subrip')) return 2;
+      if (t.includes('plain') || t.includes('text/plain')) return 3;
+      if (t.includes('html')) return 5;
+      return 4;
+    };
+    let best = null;
+    for (const tag of trTags) {
+      const url = attr(tag, 'url');
+      if (!url) continue;
+      const type = attr(tag, 'type') || attr(tag, 'mimetype');
+      if (!best || rank(type) < rank(best.type)) best = { url, type };
+    }
+    if (best) { transcriptUrl = best.url; transcriptType = best.type; }
     const enc = it.match(/<enclosure\b[^>]*>/i);
     items.push({
       title: tag(it, 'title'),
@@ -65,15 +83,20 @@ function transcriptToText(body, contentType) {
   if (ct.includes('json') || trimmed.startsWith('{') || trimmed.startsWith('[')) {
     try {
       const j = JSON.parse(trimmed);
-      const segs = Array.isArray(j) ? j : (j.segments || j.results || []);
+      const segs = Array.isArray(j) ? j : (j.segments || j.results || j.transcript || j.transcripts || []);
       if (Array.isArray(segs) && segs.length) {
-        return segs.map(s => {
+        const out = segs.map(s => {
+          if (typeof s === 'string') return s;
           const who = s.speaker || s.spk || '';
-          const text = s.body || s.text || s.utterance || '';
+          const text = s.body || s.text || s.utterance || s.content || '';
           return who ? `${who}: ${text}` : text;
         }).filter(Boolean).join('\n').trim();
+        if (out) return out;
       }
-    } catch (e) { /* fall through */ }
+      // Parsed as JSON but no recognizable transcript shape — don't hand raw
+      // JSON back as "plain text"; signal empty so the caller reports no transcript.
+      return '';
+    } catch (e) { /* not JSON after all — fall through to text formats */ }
   }
 
   // WebVTT
