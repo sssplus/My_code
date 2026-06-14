@@ -111,6 +111,13 @@
       const d = await api(`/api/discover?${qs}`);
       return { results: d.results || [], filtered: d.filtered || 0 };
     },
+    async podcastEpisodes(feedUrl) {
+      return await api(`/api/podcast/episodes?${new URLSearchParams({ feedUrl }).toString()}`);
+    },
+    async podcastTranscript(url) {
+      const d = await api(`/api/podcast/transcript?${new URLSearchParams({ url }).toString()}`);
+      return d.text;
+    },
     async callAI(systemPrompt, userPrompt, provider, feature) {
       const d = await api('/api/ai', { method: 'POST', body: { systemPrompt, userPrompt, provider, feature } });
       if (state.user && d.usage) state.user.usage = d.usage;

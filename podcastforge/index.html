@@ -24,6 +24,7 @@
       <a href="#landing-hero" class="nav-landing-only">Home</a>
       <a href="#landing-features" class="nav-landing-only">Features</a>
       <a href="#discover" class="nav-workspace-only" style="display: none;">Discover</a>
+      <a href="#transcripts" class="nav-workspace-only" style="display: none;">Transcripts</a>
       <a href="#studio" class="nav-workspace-only" style="display: none;">Script Studio</a>
       <a href="#app" class="nav-workspace-only" style="display: none;">Generator</a>
       <a href="#agent" class="nav-workspace-only" style="display: none;">Agent</a>
@@ -232,6 +233,18 @@
       </div>
       <div id="discover-container">
         <div style="padding:40px; text-align:center; color:var(--text-muted); font-family:monospace;">Loading discovery…</div>
+      </div>
+    </section>
+
+    <!-- Transcript Puller Section -->
+    <section id="transcripts" style="max-width:1140px; margin:0 auto; padding:30px 24px 10px;">
+      <div style="text-align:center; margin-bottom:28px;">
+        <div class="section-label" style="color:var(--accent-cyan);">Source Text</div>
+        <h2 class="section-title" style="font-size:24px;">Pull a Transcript</h2>
+        <p class="section-sub" style="font-size:14px; max-width:640px; margin:0 auto;">Load a podcast's RSS feed and pull published transcripts straight into the Generator, Agent, or Miner. Explicit/NSFW shows are blocked.</p>
+      </div>
+      <div id="transcript-container">
+        <div style="padding:40px; text-align:center; color:var(--text-muted); font-family:monospace;">Loading transcript tool…</div>
       </div>
     </section>
 
@@ -642,5 +655,6 @@
   <script src="music-library.js"></script>
   <script src="music.js"></script>
   <script src="discover.js"></script>
+  <script src="transcript.js"></script>
 </body>
 </html>

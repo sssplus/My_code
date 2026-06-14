@@ -24,6 +24,17 @@ const sec = require('./lib/security');
 const store = require('./lib/store');
 const providers = require('./lib/providers');
 const oauth = require('./lib/oauth');
+const { safeFetchText } = require('./lib/safefetch');
+const rss = require('./lib/rss');
+
+// Conservative NSFW guard for pulled podcasts (in addition to the iTunes/RSS
+// explicit flags). Kept tight to avoid flagging legitimate shows.
+const NSFW_TERMS = ['xxx', 'hardcore porn', 'pornhub', 'onlyfans', 'nsfw', 'explicit sex', 'erotica', 'camgirl', 'fetish'];
+const NSFW_CATEGORIES = ['sexually explicit', 'adult'];
+function looksNSFW(text) {
+  const t = String(text || '').toLowerCase();
+  return NSFW_TERMS.some(w => t.includes(w));
+}
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, '..');           // serves podcastforge/
@@ -202,6 +213,44 @@ function handleListKeys(req, res, user) {
 // Podcast discovery via Apple's free iTunes Search API (no key). Done
 // server-side to avoid CORS and to enforce a content filter centrally:
 // explicit-flagged shows are dropped so users can't pull NSFW podcasts.
+// List episodes from a podcast RSS feed that have transcripts available.
+async function handlePodcastEpisodes(req, res, user, query) {
+  const feedUrl = String(query.feedUrl || '').trim();
+  if (!feedUrl) throw { status: 400, message: 'Provide a podcast RSS feed URL.' };
+  const { text } = await safeFetchText(feedUrl, { maxBytes: 5 * 1024 * 1024, timeoutMs: 15000 });
+  const feed = rss.parseFeed(text);
+
+  // Whole-feed NSFW gate
+  if (feed.explicit || feed.categories.some(c => NSFW_CATEGORIES.includes(c.toLowerCase())) || looksNSFW(feed.title)) {
+    throw { status: 451, message: 'This podcast is marked explicit/adult and can’t be pulled here.' };
+  }
+
+  const episodes = feed.items
+    .filter(it => !it.explicit && !looksNSFW(it.title) && !looksNSFW(it.description))
+    .slice(0, 25)
+    .map(it => ({
+      title: it.title,
+      description: it.description,
+      pubDate: it.pubDate,
+      hasTranscript: !!it.transcriptUrl,
+      transcriptUrl: it.transcriptUrl,
+      transcriptType: it.transcriptType
+    }));
+
+  sendJSON(res, 200, { podcast: { title: feed.title }, episodes, withTranscript: episodes.filter(e => e.hasTranscript).length });
+}
+
+// Fetch one transcript file and return clean plain text.
+async function handlePodcastTranscript(req, res, user, query) {
+  const url = String(query.url || '').trim();
+  if (!url) throw { status: 400, message: 'No transcript URL provided.' };
+  const { text, contentType } = await safeFetchText(url, { maxBytes: 8 * 1024 * 1024, timeoutMs: 20000 });
+  const plain = rss.transcriptToText(text, contentType);
+  if (!plain || plain.length < 20) throw { status: 422, message: 'No readable transcript found at that URL.' };
+  if (looksNSFW(plain.slice(0, 4000))) throw { status: 451, message: 'This transcript was flagged as explicit and was blocked.' };
+  sendJSON(res, 200, { text: plain.slice(0, 200000) });
+}
+
 async function handleDiscover(req, res, user, query) {
   const term = String(query.term || '').trim().slice(0, 120);
   const genre = String(query.genre || '').trim().slice(0, 40);
@@ -441,6 +490,8 @@ const server = http.createServer(async (req, res) => {
       return await handleDeleteKey(req, res, user, decodeURIComponent(url.slice('/api/keys/'.length)));
     }
     if (url === '/api/discover' && method === 'GET') return await handleDiscover(req, res, user, query);
+    if (url === '/api/podcast/episodes' && method === 'GET') return await handlePodcastEpisodes(req, res, user, query);
+    if (url === '/api/podcast/transcript' && method === 'GET') return await handlePodcastTranscript(req, res, user, query);
     if (url === '/api/ai' && method === 'POST') return await handleAI(req, res, user);
     if (url === '/api/billing/checkout' && method === 'POST') return await handleCheckout(req, res, user);
 

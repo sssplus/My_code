@@ -83,6 +83,7 @@
             <div class="dc-meta">${r.genre ? `<span class="dc-genre">${esc(r.genre)}</span>` : ''}${r.episodes ? `<span class="dc-eps">${r.episodes} eps</span>` : ''}</div>
             <div class="dc-actions">
               ${r.link ? `<a class="dc-open" href="${esc(r.link)}" target="_blank" rel="noopener noreferrer">Open ↗</a>` : ''}
+              ${r.feedUrl ? `<button class="dc-feed" onclick="discoverTranscripts(${i})">Transcripts</button>` : ''}
               ${r.feedUrl ? `<button class="dc-feed" onclick="discoverCopyFeed(${i})">Copy RSS</button>` : ''}
             </div>
           </div>
@@ -138,8 +139,14 @@
     document.head.appendChild(s);
   }
 
+  function openTranscripts(i) {
+    const r = state.results[i];
+    if (r && r.feedUrl && window.transcriptLoadFeed) window.transcriptLoadFeed(r.feedUrl);
+  }
+
   window.discoverPick = pickCategory;
   window.discoverCopyFeed = copyFeed;
+  window.discoverTranscripts = openTranscripts;
 
   function boot() {
     if (!document.getElementById('discover-container')) return;
