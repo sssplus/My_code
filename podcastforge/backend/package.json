@@ -4,7 +4,8 @@
   "description": "PodcastForge backend: accounts, encrypted BYO-key storage, server-side AI provider proxy, plan/usage enforcement, billing. Postgres in production (DATABASE_URL), JSON file for local dev.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=18"

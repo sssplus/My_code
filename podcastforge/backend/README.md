@@ -97,3 +97,31 @@ browser.
 
 `GET /api/health` → `{ ok: true, providers: [...] }`. Point your host's health
 check here.
+
+## Security posture
+
+Built-in, zero-dependency hardening:
+
+- **Passwords** are scrypt-hashed with a per-user salt; login does equal work
+  for unknown emails (no timing-based user enumeration) and returns a generic
+  error.
+- **Stored API keys** are encrypted at rest (AES-256-GCM, key derived from
+  `PF_SECRET`) and never leave the server in responses.
+- **Sessions** are stateless HMAC-SHA256 tokens carried in the `Authorization`
+  header (not cookies), so the API isn't exposed to CSRF.
+- **Rate limiting** (in-memory, per IP): a coarse cap across the whole API plus
+  tight buckets on `/api/auth/login` and `/api/auth/signup` to blunt
+  brute-force and signup spam. Set `TRUST_PROXY=1` behind a trusted proxy so the
+  real client IP is used. For multi-instance deploys, add edge/CDN throttling
+  too — this limiter is per-process.
+- **SSRF guard** on every user-supplied URL fetch (RSS/transcripts/audio):
+  blocks private/link-local/metadata IPs, pins the validated IP at connect time
+  (DNS-rebinding safe), and re-validates each redirect hop.
+- **Security headers** on all responses: a CDN-scoped `Content-Security-Policy`,
+  `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` /
+  `frame-ancestors 'none'` (clickjacking), `Referrer-Policy`,
+  `Permissions-Policy`, and HSTS in production.
+- **OAuth** redirect origin comes only from `APP_URL`, and a verified email is
+  required (GitHub emails are confirmed against the verified-emails endpoint).
+
+Run the regression tests with `npm test` (`node --test`).

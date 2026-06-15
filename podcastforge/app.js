@@ -1026,10 +1026,31 @@ els.btnCopy.addEventListener('click', async () => {
   }
 });
 
+const TOAST_ICONS = { success: '✓', error: '⚠', warn: '⚠', info: 'ℹ' };
 function showToast(msg, type = 'info') {
-  els.toast.textContent = msg;
+  const ico = TOAST_ICONS[type] || TOAST_ICONS.info;
+  // escapeHTML the message — provider/server errors are dynamic strings.
+  els.toast.innerHTML = `<span class="toast-ico" aria-hidden="true">${ico}</span><span>${escapeHTML(String(msg))}</span>`;
+  // Reset then re-apply on the next frame so the entrance (and error shake)
+  // replays even when an identical toast is shown back-to-back.
+  els.toast.className = 'toast';
+  void els.toast.offsetWidth; // force reflow
   els.toast.className = `toast show ${type}`;
-  setTimeout(() => els.toast.classList.remove('show'), 4000);
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => els.toast.classList.remove('show'), 4000);
+}
+
+// Direct attention to a form mistake: shake the auth card and pulse the
+// offending field(s). The red highlight clears as soon as the user edits it.
+function flagAuthError(fieldIds) {
+  const card = document.querySelector('#auth-modal .auth-card');
+  if (card) { card.classList.remove('pf-shake'); void card.offsetWidth; card.classList.add('pf-shake'); }
+  (fieldIds || []).forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('pf-invalid'); void el.offsetWidth; el.classList.add('pf-invalid');
+    el.addEventListener('input', () => el.classList.remove('pf-invalid'), { once: true });
+  });
 }
 
 // Option Chip toggles
@@ -1222,25 +1243,25 @@ async function submitAuth() {
 
   if (!(window.PF && PF.hasBackend())) {
     // Static demo with no backend: just enter the workspace.
-    if (!email) { showToast('Please enter an email.', 'warn'); return; }
+    if (!email) { showToast('Please enter an email.', 'warn'); flagAuthError(['auth-email']); return; }
     transitionToWorkspace();
     return;
   }
 
-  if (!email) { showToast('Please enter your email.', 'warn'); return; }
+  if (!email) { showToast('Please enter your email.', 'warn'); flagAuthError(['auth-email']); return; }
   const btn = document.getElementById('auth-submit');
   const restore = btn ? btn.textContent : '';
   if (btn) { btn.disabled = true; btn.textContent = '…'; }
 
   try {
     if (authMode === 'signup') {
-      if (password.length < 8) { showToast('Password must be at least 8 characters.', 'warn'); return; }
+      if (password.length < 8) { showToast('Password must be at least 8 characters.', 'warn'); flagAuthError(['auth-password']); return; }
       await PF.signup(email, password);
       syncBackendUser();
       showToast('Account created — your 15-day trial has started!', 'success');
       transitionToWorkspace();
     } else {
-      if (!password) { showToast('Please enter your password.', 'warn'); return; }
+      if (!password) { showToast('Please enter your password.', 'warn'); flagAuthError(['auth-password']); return; }
       await PF.login(email, password);
       syncBackendUser();
       showToast('Signed in!', 'success');
@@ -1250,11 +1271,13 @@ async function submitAuth() {
     // Guide the user between modes when the failure suggests the other one.
     if (authMode === 'signin' && /invalid email or password/i.test(e.message)) {
       showToast("Invalid email or password. New here? Switch to “Create account”.", 'error');
+      flagAuthError(['auth-email', 'auth-password']);
     } else if (authMode === 'signup' && /already exists/i.test(e.message)) {
       showToast('That email already has an account — switching you to Sign in.', 'warn');
       setAuthMode('signin');
     } else {
       showToast(e.message, 'error');
+      flagAuthError([]);
     }
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = restore; }

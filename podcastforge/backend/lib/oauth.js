@@ -78,16 +78,20 @@ async function fetchProfile(provider, accessToken) {
   });
   const u = await r.json().catch(() => ({}));
   if (!r.ok || !u.id) throw new Error('Could not read GitHub profile.');
-  let email = u.email;
-  if (!email) {
-    const er = await fetch('https://api.github.com/user/emails', {
-      headers: { Authorization: `Bearer ${accessToken}`, 'User-Agent': 'PodcastForge', Accept: 'application/vnd.github+json' },
-      signal: AbortSignal.timeout(15000)
-    });
-    const list = await er.json().catch(() => []);
-    const primary = Array.isArray(list) ? list.find(e => e.primary && e.verified) || list.find(e => e.verified) : null;
-    email = primary && primary.email;
-  }
+
+  // Always resolve the email from the verified-emails endpoint rather than
+  // trusting the profile's `email` field. Accounts are linked by email, so a
+  // non-verified address must never be accepted — that would let someone claim
+  // an account whose email they don't actually control.
+  const er = await fetch('https://api.github.com/user/emails', {
+    headers: { Authorization: `Bearer ${accessToken}`, 'User-Agent': 'PodcastForge', Accept: 'application/vnd.github+json' },
+    signal: AbortSignal.timeout(15000)
+  });
+  const list = await er.json().catch(() => []);
+  const primary = Array.isArray(list)
+    ? (list.find(e => e.primary && e.verified) || list.find(e => e.verified))
+    : null;
+  const email = primary && primary.email;
   if (!email) throw new Error('No verified email on your GitHub account.');
   return { email, providerId: String(u.id), name: u.name || u.login || '' };
 }
