@@ -99,8 +99,20 @@
 
     if (error) html += `<div class="tr-error">${esc(error)}</div>`;
 
-    if (podcast && episodes.length) {
-      html += `<div class="tr-pod">${esc(podcast.title || 'Podcast')}</div><div class="tr-eps">`;
+    // Skeleton episode rows while the feed is being resolved + fetched.
+    if (loading && !episodes.length) {
+      html += `<div class="tr-eps">` + Array.from({ length: 5 }).map(() => `
+        <div class="tr-ep">
+          <div class="tr-ep-main">
+            <div class="pf-skel pf-skel-line" style="width:55%;height:13px"></div>
+            <div class="pf-skel pf-skel-line" style="width:82%;height:11px;margin-top:9px"></div>
+          </div>
+          <div class="pf-skel" style="width:104px;height:32px;border-radius:8px;flex-shrink:0"></div>
+        </div>`).join('') + `</div>`;
+    }
+
+    if (podcast && episodes.length && !loading) {
+      html += `<div class="tr-pod">${esc(podcast.title || 'Podcast')}</div><div class="tr-eps pf-stagger">`;
       episodes.forEach((ep, i) => {
         const busy = state.pulling === i;
         let action;

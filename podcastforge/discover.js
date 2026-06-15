@@ -67,13 +67,27 @@
 
     if (error) html += `<div class="dc-error">${esc(error)}</div>`;
 
+    // Progressive loading: show shimmering placeholder cards instead of a bare
+    // spinner so the layout settles before the real results arrive.
+    if (loading) {
+      html += `<div class="pf-skel-grid">` + Array.from({ length: 8 }).map(() => `
+        <div class="pf-skel-card">
+          <div class="pf-skel pf-skel-art"></div>
+          <div class="pf-skel-body">
+            <div class="pf-skel pf-skel-line" style="width:80%"></div>
+            <div class="pf-skel pf-skel-line" style="width:55%"></div>
+            <div class="pf-skel pf-skel-line" style="width:40%"></div>
+          </div>
+        </div>`).join('') + `</div>`;
+    }
+
     if (searched && !results.length && !loading && !error) {
       html += `<div class="dc-empty">No family-friendly podcasts matched. Try different terms.</div>`;
     }
 
-    if (results.length) {
+    if (results.length && !loading) {
       if (state.filtered > 0) html += `<div class="dc-note">${state.filtered} explicit-flagged result${state.filtered > 1 ? 's' : ''} hidden.</div>`;
-      html += `<div class="dc-grid">`;
+      html += `<div class="dc-grid pf-stagger">`;
       results.forEach((r, i) => {
         const art = /^https?:\/\//i.test(r.artwork) ? r.artwork : '';
         html += `<div class="dc-pod">

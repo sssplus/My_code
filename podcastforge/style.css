@@ -1638,3 +1638,83 @@ textarea#transcript::-webkit-scrollbar-thumb:hover,
 .ag-input::-webkit-scrollbar-thumb:hover, .mn-input::-webkit-scrollbar-thumb:hover {
   background: var(--accent-violet2);
 }
+
+/* ============================================================
+   v2.5 — Motion & micro-interaction layer
+   Purposeful, snappy feedback: tactile button presses, keyboard
+   focus rings, reusable skeleton loaders, staggered list reveals,
+   and form-error shake/pulse. Everything here degrades gracefully
+   under prefers-reduced-motion (see the guard at the bottom).
+   ============================================================ */
+
+/* Tactile press feedback on every button. Class rules keep their own
+   transitions (higher specificity); this only fills the gap for buttons
+   that don't define one and adds the universal "press" on :active. */
+button { transition: transform var(--transition-fast), box-shadow var(--transition-fast), filter var(--transition-fast); }
+button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
+
+/* Visible focus only for keyboard users (mouse clicks stay clean). */
+:focus-visible {
+  outline: 2px solid var(--accent-cyan2);
+  outline-offset: 2px;
+  border-radius: 5px;
+}
+
+/* Generic skeleton primitives — reuse the existing skelShimmer keyframe so
+   any tool (Discover, Transcripts, …) can show progressive loading. */
+.pf-skel {
+  background: linear-gradient(90deg, var(--bg-input) 25%, rgba(255,255,255,0.06) 50%, var(--bg-input) 75%);
+  background-size: 400% 100%;
+  animation: skelShimmer 1.4s ease infinite;
+  border-radius: 6px;
+}
+.pf-skel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr)); gap: 14px; }
+.pf-skel-card { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; background: var(--bg-card); }
+.pf-skel-art { aspect-ratio: 1/1; border-radius: 0; }
+.pf-skel-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 9px; }
+.pf-skel-line { height: 11px; }
+
+/* Staggered entrance for a freshly rendered list/grid. Children rise + fade in
+   sequence, guiding the eye top-to-bottom. Re-rendering re-triggers it. */
+@keyframes pfRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.pf-stagger > * { opacity: 0; animation: pfRise 0.42s cubic-bezier(0.25,1,0.5,1) forwards; }
+.pf-stagger > *:nth-child(1) { animation-delay: 0.02s; }
+.pf-stagger > *:nth-child(2) { animation-delay: 0.06s; }
+.pf-stagger > *:nth-child(3) { animation-delay: 0.10s; }
+.pf-stagger > *:nth-child(4) { animation-delay: 0.14s; }
+.pf-stagger > *:nth-child(5) { animation-delay: 0.18s; }
+.pf-stagger > *:nth-child(6) { animation-delay: 0.22s; }
+.pf-stagger > *:nth-child(7) { animation-delay: 0.26s; }
+.pf-stagger > *:nth-child(8) { animation-delay: 0.30s; }
+.pf-stagger > *:nth-child(9) { animation-delay: 0.34s; }
+.pf-stagger > *:nth-child(n+10) { animation-delay: 0.38s; }
+
+/* Form-error feedback: shake the container + pulse the offending field so the
+   user's eye lands on the exact mistake (pairs with the toast message). */
+@keyframes pfShake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-5px); }
+  40%, 60% { transform: translateX(5px); }
+}
+.pf-shake { animation: pfShake 0.4s cubic-bezier(0.36,0.07,0.19,0.97); }
+@keyframes pfPulseInvalid {
+  0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.5); }
+  100% { box-shadow: 0 0 0 7px rgba(239,68,68,0); }
+}
+.pf-invalid { border-color: var(--accent-red) !important; animation: pfPulseInvalid 0.65s ease-out; }
+
+/* Toast: a small icon + spring entrance is already defined; nudge errors with
+   a subtle attention shake on top of the existing slide-in. */
+.toast.show.error { animation: pfShake 0.4s cubic-bezier(0.36,0.07,0.19,0.97) 0.3s; }
+.toast-ico { font-size: 14px; line-height: 1; }
+
+/* Respect the OS "reduce motion" setting: keep feedback (color/opacity) but
+   drop the movement that can cause discomfort. */
+@media (prefers-reduced-motion: reduce) {
+  button:not(:disabled):active { transform: none; }
+  .pf-skel { animation: none; }
+  .pf-stagger > * { opacity: 1; animation: none; }
+  .pf-shake, .toast.show.error { animation: none; }
+  .pf-invalid { animation: none; }
+}
