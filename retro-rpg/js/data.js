@@ -971,12 +971,49 @@ var DATA = {
     {
       id:'assassination_attempt', title:'Assassination Attempt',
       desc:"An assassin infiltrates the palace. Someone on the council hired them.",
+      speaker:'Spymaster Vane', setting:'war_tent',
       availableFor:['noble','prince'],
       options:[
-        { text:'Investigate quietly (use spy)',    effects:{ spyAgents:-1, identifyChance:0.7 } },
-        { text:'Public accusation',               effects:{ councilTrustRisk:-30, popularFavor:'+20 if right' } },
-        { text:'Increase palace guard',           effects:{ gold:-200, preventNext:true } },
-        { text:'Fake your own death',             effects:{ intelGain:true, risk:'high', specialEvent:true } }
+        { text:'Investigate quietly (use spy)',    effects:{ spyAgents:-1, councilTrust:+5 }, desc:'Patient. Keeps it off the record.' },
+        { text:'Public accusation',               effects:{ councilTrust:-30, popularFavor:+20 }, desc:'The people love a purge. The council, less so.' },
+        { text:'Increase palace guard',           effects:{ treasury:-200, armyMorale:+5 }, desc:'Costs coin. Buys you another night.' },
+        { text:'Set a trap with yourself as bait', effects:{ councilTrust:+15, armyMorale:+10 }, desc:'A King who hunts his hunters. Risky. Legendary.' }
+      ]
+    },
+    {
+      id:'breach_defense', title:'The Breach at Ironhold',
+      desc:"Sire, the enemy approaches the breach. Lord Valerius urges a retreat. Our troops are tired, but the position is key. What is your command?",
+      speaker:'Captain Aris', setting:'war_tent',
+      availableFor:['noble','prince'],
+      options:[
+        { text:'Reinforce the Breach',   effects:{ treasury:-400, armyMorale:+15, councilTrust:+5 },  desc:'Throw fresh men at the gap. Hold the line at any cost.' },
+        { text:'Fortify Ironhold',       effects:{ treasury:-700, armyMorale:+5, councilTrust:+10 },  desc:'Trade ground for walls. Expensive, but it endures.' },
+        { text:'Order a Strategic Retreat', effects:{ armyMorale:-20, popularFavor:-10, councilTrust:+5 }, desc:'Save the army, surrender the keep. Valerius approves.' },
+        { text:'Attempt a Counter-Attack', effects:{ armyMorale:+25, treasury:-300, popularFavor:+15 }, desc:'Break them on open ground. Glory or ruin — no middle.' }
+      ]
+    },
+    {
+      id:'war_levy', title:'The War Levy',
+      desc:"The campaign chest runs dry, my lord. The army must be paid before the next moon, or they will pay themselves from the villages.",
+      speaker:'Treasurer Holt', setting:'war_tent',
+      availableFor:['noble','prince'],
+      options:[
+        { text:'Raise taxes on the merchant guilds', effects:{ treasury:+1200, popularFavor:-15, councilTrust:-5 }, desc:'Coin flows. The guilds will remember this.' },
+        { text:'Melt the royal regalia',             effects:{ treasury:+800, councilTrust:-20, armyMorale:+10 }, desc:'A King without a crown still has an army.' },
+        { text:'Plead with the council for loans',   effects:{ treasury:+500, councilTrust:-10 }, desc:'They will lend — at a price paid in favours.' },
+        { text:'Let the soldiers loot the frontier', effects:{ armyMorale:+20, popularFavor:-30, councilTrust:-15 }, desc:'The army eats. The realm bleeds.' }
+      ]
+    },
+    {
+      id:'marriage_alliance', title:'An Offer of Marriage',
+      desc:"Veranthos offers a marriage alliance — their merchant-princess for your hand. It would seal the southern border in a single signature.",
+      speaker:'Lord Chancellor', setting:'war_tent',
+      availableFor:['noble','prince'],
+      options:[
+        { text:'Accept the alliance',          effects:{ foreignRel:{veranthos:+25}, treasury:+1000, councilTrust:+10 }, desc:'Peace and a dowry. But your heart is no longer your own.' },
+        { text:'Refuse — politely',            effects:{ foreignRel:{veranthos:-10}, popularFavor:+5 }, desc:'You keep your freedom. They keep their grudge.' },
+        { text:'Counter: a trade pact instead', effects:{ foreignRel:{veranthos:+10}, treasury:+400 }, desc:'Gold without chains. A merchant respects a merchant.' },
+        { text:'Stall for time',               effects:{ councilTrust:-5, foreignRel:{veranthos:-5} }, desc:'Indecision is a decision. The window narrows.' }
       ]
     }
   ]

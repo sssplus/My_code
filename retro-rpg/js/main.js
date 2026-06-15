@@ -269,6 +269,25 @@ var GAME = (function() {
     }
   }
 
+  // Convene the War Council when the player requests it from the menu.
+  // Returns true if an event was opened (and the state was switched).
+  function openCouncilIfPending() {
+    if (!UI.consumePendingCouncil()) return false;
+    var event = SYSTEMS.POLITICS.triggerEvent();
+    if (!event) { UI.showNotification('The council has no matters to raise.', '#9BA19D'); return false; }
+    UI.showPoliticalEvent(event, function(evId, choiceIdx) {
+      SYSTEMS.POLITICS.resolveEventChoice(evId, choiceIdx);
+      UI.showNotification('Command issued.', '#DBA000');
+      if (evId === 'castle_siege' && WORLD.getCurrentZoneId() === 'world') {
+        var p2 = PLAYER.get();
+        WORLD.clearArmies();
+        WORLD.triggerSiege(p2 ? (p2.kingdom || 'player') : 'player');
+      }
+    });
+    transition(STATE.POL_EVENT);
+    return true;
+  }
+
   function updateWorld(dt) {
     // Save shortcut
     if (ENGINE.action('save')) {
@@ -283,7 +302,7 @@ var GAME = (function() {
     }
 
     // Pass input to open overlays first
-    if (UI.isMenuOpen())          { UI.handleMenuInput(); return; }
+    if (UI.isMenuOpen())          { UI.handleMenuInput(); if (openCouncilIfPending()) return; return; }
     if (UI.isShopOpen())          { UI.handleShopInput(); return; }
     if (UI.isPoliticalEventOpen()){ UI.handleEventInput(); return; }
 

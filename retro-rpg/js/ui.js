@@ -172,11 +172,24 @@ var UI = (function() {
       if (ENGINE.isButtonClicked(20 + i*(TAB_W+8), 50, TAB_W, 28)) menuState.tab = i;
     });
 
+    // Politics tab: convene the War Council on demand (Prince/Noble)
+    if (menuState.tab === 3) {
+      var pp = PLAYER.get();
+      if (pp && (pp.origin === 'prince' || pp.origin === 'noble') && ENGINE.action('confirm')) {
+        pendingCouncil = true;
+        closeMenu();
+        return;
+      }
+    }
+
     // Controls tab: rebind clicks
     if (menuState.tab === 5) {
       handleControlsClicks(20, 90, ENGINE.getCanvas().width - 40);
     }
   }
+
+  var pendingCouncil = false;
+  function consumePendingCouncil() { var v = pendingCouncil; pendingCouncil = false; return v; }
 
   function renderMenu(ctx, canvasW, canvasH) {
     if (!menuState) return;
@@ -444,7 +457,10 @@ var UI = (function() {
     ENGINE.drawButton(canvasW/2-80, 116+shopState.items.length*36, 160, 28, '[ESC] Close', false, {color:'#6C6E68', fontSize:8});
   }
 
-  // ── Political Event UI ─────────────────────────────────────
+  // ── War Council / Kingdom Management UI ────────────────────
+  //  A command-tent decision screen: persistent GOLD / MORALE /
+  //  LOYALTY HUD, a speaking advisor, and a 2×2 grid of command
+  //  cards whose consequences preview before you commit.
   function showPoliticalEvent(event, onChoice) {
     eventState = {
       event:    event,
@@ -464,51 +480,153 @@ var UI = (function() {
     eventState = null;
   }
 
+  // 2×2 grid geometry for the command cards (matches the renderer)
+  function eventCardRect(i, canvasW, canvasH) {
+    var gx = 40, gy = canvasH - 132, gw = canvasW - 80;
+    var cw = (gw - 16) / 2, chh = 44;
+    var col = i % 2, row = Math.floor(i / 2);
+    return { x: gx + col * (cw + 16), y: gy + row * (chh + 8), w: cw, h: chh };
+  }
+
   function handleEventInput() {
     if (!eventState) return;
     var ev = eventState.event;
-    var canvasW = ENGINE.getCanvas().width;
+    var canvasW = ENGINE.getCanvas().width, canvasH = ENGINE.getCanvas().height;
+    var n = ev.options.length;
 
-    // Keyboard: navigate + confirm + number quick-select
-    if (ENGINE.action('up'))   eventState.selIdx = (eventState.selIdx - 1 + ev.options.length) % ev.options.length;
-    if (ENGINE.action('down')) eventState.selIdx = (eventState.selIdx + 1) % ev.options.length;
+    // Keyboard: 2×2 grid navigation
+    if (ENGINE.action('left'))  eventState.selIdx = (eventState.selIdx % 2 === 0) ? eventState.selIdx + 1 : eventState.selIdx - 1;
+    if (ENGINE.action('right')) eventState.selIdx = (eventState.selIdx % 2 === 0) ? eventState.selIdx + 1 : eventState.selIdx - 1;
+    if (ENGINE.action('up'))    eventState.selIdx = (eventState.selIdx - 2 + n) % n;
+    if (ENGINE.action('down'))  eventState.selIdx = (eventState.selIdx + 2) % n;
+    eventState.selIdx = Math.max(0, Math.min(n - 1, eventState.selIdx));
+
     if (ENGINE.action('confirm')) { chooseEventOption(eventState.selIdx); return; }
-    for (var k = 0; k < ev.options.length; k++) {
+    for (var k = 0; k < n; k++) {
       if (ENGINE.isKeyJust('Digit' + (k+1))) { chooseEventOption(k); return; }
     }
 
-    ev.options.forEach(function(opt, i) {
-      var by = 210 + i*40;
-      if (eventState && ENGINE.isButtonClicked(canvasW/2-220, by, 440, 36)) chooseEventOption(i);
-      if (eventState && ENGINE.didMouseMove() && ENGINE.isButtonHovered(canvasW/2-220, by, 440, 36)) eventState.selIdx = i;
-    });
-
-    if (eventState && ENGINE.action('cancel')) {
-      eventState = null;
+    for (var i = 0; i < n; i++) {
+      var r = eventCardRect(i, canvasW, canvasH);
+      if (eventState && ENGINE.isButtonClicked(r.x, r.y, r.w, r.h)) { chooseEventOption(i); return; }
+      if (eventState && ENGINE.didMouseMove() && ENGINE.isButtonHovered(r.x, r.y, r.w, r.h)) eventState.selIdx = i;
     }
+
+    if (eventState && ENGINE.action('cancel')) eventState = null;
+  }
+
+  // Persistent three-resource HUD: GOLD / MORALE / LOYALTY.
+  function renderKingdomHUD(ctx, canvasW) {
+    var p = PLAYER.get();
+    if (!p) return;
+    var gold    = p.treasury || 0;
+    var goldPct = Math.min(100, Math.round(gold / 20000 * 100));
+    var morale  = Math.round(p.armyMorale != null ? p.armyMorale : 70);
+    var loyalty = Math.round(p.councilTrust != null ? p.councilTrust : 50);
+
+    ENGINE.drawPanel(8, 6, canvasW - 16, 40, { bg: 'rgba(8,8,16,0.95)', border: '#DBA000' });
+    var segW = (canvasW - 16) / 3;
+    drawHudStat(ctx, 16,            'GOLD',    '◉', gold.toLocaleString(), goldPct, '#DBA000', segW - 16);
+    drawHudStat(ctx, 16 + segW,     'MORALE',  '⚑', morale + '',          Math.min(100, morale), '#77C537', segW - 16);
+    drawHudStat(ctx, 16 + segW * 2, 'LOYALTY', '⚒', loyalty + '',         Math.min(100, loyalty), '#68BCC5', segW - 16);
+  }
+
+  function drawHudStat(ctx, x, label, icon, value, pct, color, w) {
+    ENGINE.drawText(icon, x, 24, { size: 12, color: color });
+    ENGINE.drawText(label, x + 18, 22, { size: 9, color: '#FFFFFF', bold: true });
+    ENGINE.drawText(value, x + 18 + label.length * 7 + 12, 22, { size: 10, color: color, bold: true });
+    ENGINE.drawText(pct + '%', x + w - 28, 22, { size: 8, color: '#9BA19D' });
+    // bar
+    var bx = x + 18, bw = w - 50;
+    ctx.fillStyle = '#1B2A34'; ctx.fillRect(bx, 28, bw, 8);
+    ctx.fillStyle = color;     ctx.fillRect(bx, 28, Math.round(bw * pct / 100), 8);
+    ctx.strokeStyle = ENGINE.darken(color, 30); ctx.lineWidth = 1; ctx.strokeRect(bx, 28, bw, 8);
   }
 
   function renderPoliticalEvent(ctx, canvasW, canvasH) {
     if (!eventState) return;
     var ev = eventState.event;
 
-    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    // Rainy command-tent backdrop
+    ctx.fillStyle = 'rgba(6,8,16,0.92)';
     ctx.fillRect(0, 0, canvasW, canvasH);
+    ENGINE.drawStudPattern(0, 52, canvasW, canvasH - 52, '#0C0E18', 44);
+    var vg = ctx.createRadialGradient(canvasW/2, canvasH/2, 80, canvasW/2, canvasH/2, 460);
+    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.6)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, canvasW, canvasH);
 
-    ENGINE.drawPanel(canvasW/2-240, 80, 480, 400, {title:'ROYAL CRISIS', border:'#81007B'});
+    // Persistent resource HUD
+    renderKingdomHUD(ctx, canvasW);
 
-    ENGINE.drawText(ev.title, canvasW/2, 120, {size:12, color:'#F2CD37', bold:true, align:'center'});
-    ENGINE.drawTextWrapped(ev.desc, canvasW/2-210, 148, 420, 14, {size:8, color:'#9BA19D', align:'left'});
+    // Advisor minifigure (left) addressing the war table
+    var p = PLAYER.get();
+    ENGINE.drawMinifigure(110, 250, { torsoColor:'#6C6E68', legColor:'#1B2A34', headColor:'#E4CD9E', weapon:'sword', scale:3.0, emotion:'stern' });
+    // You (right), crowned if a prince
+    if (p) ENGINE.drawMinifigure(canvasW - 110, 250, { torsoColor:p.torsoColor, legColor:p.legColor, headColor:p.headColor, hat:p.hat, scale:3.0, facingLeft:true });
 
-    ENGINE.drawText('RESPONSE OPTIONS:', canvasW/2, 198, {size:8, color:'#F2CD37', align:'center'});
+    // Title banner
+    ENGINE.drawPanel(canvasW/2-180, 58, 360, 26, { bg:'rgba(20,10,30,0.95)', border:'#81007B' });
+    ENGINE.drawText('⚔ WAR COUNCIL — ' + ev.title, canvasW/2, 76, { size:10, color:'#F2CD37', bold:true, align:'center' });
 
+    // Speaker dialogue (green name + white line), like the reference
+    var dlgY = 150;
+    ENGINE.drawPanel(40, dlgY, canvasW-80, 70, { bg:'rgba(8,10,22,0.96)', border:'#DBA000' });
+    var speaker = ev.speaker || 'Captain Aris';
+    ENGINE.drawText(speaker + ':', 56, dlgY + 22, { size:10, color:'#77C537', bold:true });
+    ENGINE.drawTextWrapped('"' + ev.desc + '"', 56, dlgY + 40, canvasW - 112, 14, { size:9, color:'#FFFFFF' });
+
+    // 2×2 command cards
     ev.options.forEach(function(opt, i) {
-      var by = 210 + i*40;
-      var selected = (i === eventState.selIdx);
-      ENGINE.drawButton(canvasW/2-220, by, 440, 36, '[' + (i+1) + '] ' + opt.text, selected, {color:'#0055BF', fontSize:8});
+      var r = eventCardRect(i, canvasW, canvasH);
+      var on = (i === eventState.selIdx);
+      ENGINE.drawPanel(r.x, r.y, r.w, r.h, {
+        bg: on ? 'rgba(0,40,90,0.96)' : 'rgba(10,12,24,0.92)',
+        border: on ? '#F2CD37' : '#3A3F48'
+      });
+      ENGINE.drawText('[' + (i+1) + '] "' + opt.text + '"', r.x + 10, r.y + 18, { size:8, color: on ? '#FFFFFF' : '#B8C0CC', bold:on });
+      // consequence preview for the highlighted card
+      if (on) {
+        var eff = formatEventEffects(opt.effects);
+        var ex = r.x + 10, ey = r.y + 34;
+        eff.forEach(function(s) {
+          ENGINE.drawText(s.label, ex, ey, { size:7, color: s.good ? '#77C537' : '#E0564B' });
+          ex += s.label.length * 4.6 + 14;
+          if (ex > r.x + r.w - 40) { ex = r.x + 10; ey += 10; }
+        });
+      }
     });
 
-    ENGINE.drawText('ESC — Dismiss (risky)', canvasW/2, 210+ev.options.length*40+10, {size:7, color:'#6C6E68', align:'center'});
+    // Selected card's flavor description, under the dialogue
+    var selOpt = ev.options[eventState.selIdx];
+    if (selOpt && selOpt.desc) {
+      ENGINE.drawText('▸ ' + selOpt.desc, canvasW/2, dlgY + 86, { size:8, color:'#DBA000', align:'center' });
+    }
+    ENGINE.drawText('↑↓←→ choose   ENTER / click to command   ESC dismiss (risky)', canvasW/2, canvasH-8, { size:7, color:'#6C6E68', align:'center' });
+    ENGINE.drawScanlines(0.06);
+  }
+
+  // Map raw effect deltas to readable, color-coded labels.
+  function formatEventEffects(effects) {
+    if (!effects) return [];
+    var out = [];
+    function push(label, val, goodWhenPos) {
+      if (val === undefined || val === 0) return;
+      var good = goodWhenPos ? val > 0 : val < 0;
+      out.push({ label: label + ' ' + (val > 0 ? '+' : '') + val, good: good });
+    }
+    push('Gold', effects.treasury, true);
+    if (effects.gold) push('Gold', effects.gold, true);
+    push('Morale', effects.armyMorale, true);
+    push('Loyalty', effects.councilTrust, true);
+    push('People', effects.popularFavor, true);
+    push('Army', effects.armySize, true);
+    push('Spies', effects.spyAgents, true);
+    if (effects.foreignRel) {
+      Object.keys(effects.foreignRel).forEach(function(kd) {
+        push(kd.charAt(0).toUpperCase() + kd.slice(1), effects.foreignRel[kd], true);
+      });
+    }
+    return out;
   }
 
   // ── Notifications ──────────────────────────────────────────
@@ -701,6 +819,7 @@ var UI = (function() {
     renderMenu, handleMenuInput, openMenu, closeMenu, isMenuOpen,
     renderShop, handleShopInput, openShop, closeShop, isShopOpen,
     renderPoliticalEvent, handleEventInput, showPoliticalEvent, isPoliticalEventOpen,
+    renderKingdomHUD, consumePendingCouncil,
     renderNotification, showNotification,
     renderControlsTab, handleControlsClicks
   };

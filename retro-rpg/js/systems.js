@@ -35,6 +35,8 @@ var SYSTEMS = (function() {
       var effects = choice.effects || {};
 
       if (effects.gold)         { if (effects.gold > 0) PLAYER.gainGold(effects.gold); else p.treasury += effects.gold; }
+      if (effects.treasury)     p.treasury = Math.max(0, (p.treasury || 0) + effects.treasury);
+      if (effects.armySize)     p.armySize = Math.max(0, (p.armySize || 0) + effects.armySize);
       if (effects.popularFavor) p.popularFavor = Math.max(0, Math.min(100, (p.popularFavor||50) + effects.popularFavor));
       if (effects.councilTrust) p.councilTrust = Math.max(0, Math.min(100, (p.councilTrust||50) + effects.councilTrust));
       if (effects.armyMorale)   p.armyMorale   = Math.max(0, Math.min(100, (p.armyMorale||70) + effects.armyMorale));
@@ -235,6 +237,10 @@ var SYSTEMS = (function() {
     ENGINE.drawBar(x+8, iy+42, w-16, 10, Math.min(100, (p.armySize||0)/50), 100, '#C91A09', 'Army');
 
     ENGINE.drawText('Treasury: ' + (p.treasury||0) + 'g', x+8, iy+62, {size:8, color:'#DBA000'});
+
+    if (p.origin === 'prince' || p.origin === 'noble') {
+      ENGINE.drawText('[Enter] Convene War Council', x+8, iy+74, {size:8, color:'#77C537', bold:true});
+    }
 
     // Foreign relations
     ENGINE.drawText('Foreign Relations:', x+8, iy+76, {size:7, color:'#9BA19D'});
