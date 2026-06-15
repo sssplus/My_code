@@ -47,7 +47,12 @@ function check(bucket, id, max, windowMs) {
   };
 }
 
+// Clear a single (bucket, id) window. Called after a successful auth so that
+// legitimate users (e.g. many people behind one NAT/proxy IP) don't accumulate
+// toward the brute-force lockout — only failing attempts keep counting.
+function reset(bucket, id) { hits.delete(`${bucket}:${id}`); }
+
 // Test/maintenance helper.
 function _reset() { hits.clear(); }
 
-module.exports = { check, _reset };
+module.exports = { check, reset, _reset };

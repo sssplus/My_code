@@ -77,13 +77,21 @@ function clientIp(req) {
    pin the allowed CDN/script origins (so an injected <script src=evil> is
    blocked), forbid plugins/base-tag hijacking, and forbid framing of the app
    (clickjacking). The payment + animation CDNs are allow-listed explicitly. */
+// Origins the frontend talks to directly from the browser on the no-backend /
+// bring-your-own-key path (app.js calls these providers itself when the user
+// isn't signed into the backend). Authenticated users go through same-origin
+// /api/ai instead, but these must stay allow-listed or the static/BYO-key
+// generation flow breaks under CSP.
+const AI_ORIGINS = 'https://api.anthropic.com https://generativelanguage.googleapis.com https://openrouter.ai https://integrate.api.nvidia.com https://api.openai.com https://api.groq.com';
 const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://*.razorpay.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
-  "style-src 'self' 'unsafe-inline'",
+  // Google Fonts: the stylesheet (@import in style.css) is governed by
+  // style-src; the woff2 files it references load from fonts.gstatic.com.
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "img-src 'self' data: https:",
-  "font-src 'self' data:",
-  "connect-src 'self' https://*.razorpay.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  `connect-src 'self' https://*.razorpay.com ${AI_ORIGINS}`,
   "frame-src https://*.razorpay.com https://api.razorpay.com",
   "object-src 'none'",
   "base-uri 'self'",
@@ -637,13 +645,18 @@ const server = http.createServer(async (req, res) => {
     const g = ratelimit.check('api', ip, 300, 5 * 60 * 1000);
     if (!g.ok) return tooMany(res, g.retryAfter);
   }
-  // Brute-force / abuse protection on auth. Login + OAuth start share a tight
-  // window; signup is capped per hour to curb mass account creation.
+  // Brute-force / abuse protection on auth. Login gets a tight window; signup
+  // is capped per hour to curb mass account creation; OAuth start has its own
+  // moderate cap. A successful login/signup resets its bucket (see below) so
+  // legitimate users behind a shared IP aren't penalised by failed attempts.
   if (method === 'POST' && (url === '/api/auth/login' || url === '/api/auth/signup')) {
     const isLogin = url.endsWith('/login');
     const r = isLogin
       ? ratelimit.check('login', ip, 10, 15 * 60 * 1000)
       : ratelimit.check('signup', ip, 5, 60 * 60 * 1000);
+    if (!r.ok) return tooMany(res, r.retryAfter);
+  } else if (method === 'GET' && /^\/api\/auth\/(google|github)$/.test(url)) {
+    const r = ratelimit.check('oauth', ip, 20, 15 * 60 * 1000);
     if (!r.ok) return tooMany(res, r.retryAfter);
   }
 
@@ -655,8 +668,10 @@ const server = http.createServer(async (req, res) => {
         oauth: { google: oauthReady('google'), github: oauthReady('github') }
       });
     }
-    if (url === '/api/auth/signup' && method === 'POST') return await handleSignup(req, res);
-    if (url === '/api/auth/login' && method === 'POST') return await handleLogin(req, res);
+    // On success, clear the IP's auth bucket so accumulated failures from
+    // others sharing the IP don't lock this (now-proven-legitimate) user out.
+    if (url === '/api/auth/signup' && method === 'POST') { await handleSignup(req, res); ratelimit.reset('signup', ip); return; }
+    if (url === '/api/auth/login' && method === 'POST') { await handleLogin(req, res); ratelimit.reset('login', ip); return; }
 
     // ----- OAuth (unauthenticated) -----
     let m = url.match(/^\/api\/auth\/(google|github)$/);
