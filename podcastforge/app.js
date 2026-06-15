@@ -327,6 +327,10 @@ function detectProvider() {
     els.badge.textContent = '🟢 NVIDIA NIM';
     els.badge.style.setProperty('--badge-color', '#76b900');
     appState.provider = 'nvidia';
+  } else if (key.startsWith('gsk_')) {
+    els.badge.textContent = '🟠 Groq';
+    els.badge.style.setProperty('--badge-color', '#f55036');
+    appState.provider = 'groq';
   } else {
     els.badge.textContent = '⚪ OpenAI Compatible';
     els.badge.style.setProperty('--badge-color', '#10b981');
@@ -392,7 +396,7 @@ function syncBackendUser() {
       appState.provider = 'none';
       els.badge.className = 'provider-badge none';
       els.badge.textContent = 'No key detected';
-      els.apiKey.placeholder = 'Paste your Anthropic, Gemini, OpenRouter, or OpenAI API key here...';
+      els.apiKey.placeholder = 'Paste your Anthropic, Gemini, OpenRouter, OpenAI, Groq, or NVIDIA API key here...';
     }
   }
 
@@ -1094,7 +1098,7 @@ function hideAuthModal() {
 let lastAccountData = null;
 const ACCOUNT_FEATURES = {
   generate: 'Generations', studio: 'Script Studio', miner: 'Miner sections',
-  tracker: 'AI Stack audits', agent: 'Agent runs', music: 'Music briefs', chat: 'Chat messages'
+  tracker: 'AI Stack audits', agent: 'Agent runs', music: 'Music briefs', chat: 'Chat messages', transcribe: 'Audio transcripts'
 };
 
 function timeAgo(iso) {
@@ -1299,7 +1303,7 @@ function signOut() {
   localStorage.removeItem(STORAGE_KEYS.API_KEY);
   appState.apiKey = '';
   els.apiKey.value = '';
-  els.apiKey.placeholder = 'Paste your Anthropic, Gemini, OpenRouter, or OpenAI API key here...';
+  els.apiKey.placeholder = 'Paste your Anthropic, Gemini, OpenRouter, OpenAI, Groq, or NVIDIA API key here...';
   const chip = document.getElementById('nav-account');
   if (chip) chip.style.display = 'none';
   detectProvider();

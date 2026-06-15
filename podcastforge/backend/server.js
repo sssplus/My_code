@@ -315,10 +315,14 @@ async function handlePodcastTranscribe(req, res, user) {
 
   const { audioUrl } = await readBody(req);
   if (!audioUrl) throw { status: 400, message: 'No episode audio URL provided.' };
-  const key = (user.keys && user.keys.openai) ? sec.decryptKey(user.keys.openai) : null;
-  if (!key) throw { status: 400, message: 'Add an OpenAI API key (Whisper) to generate transcripts from audio.' };
 
-  // OpenAI audio transcription caps uploads at 25 MB.
+  // Use whichever STT-capable key the user has, in preference order, with fallback.
+  const available = providers.STT_ORDER.filter(p => user.keys && user.keys[p]);
+  if (!available.length) {
+    throw { status: 400, message: 'Add an OpenAI, Groq, or Gemini key to generate transcripts from audio.' };
+  }
+
+  // 25 MB cap (OpenAI/Groq Whisper upload limit; Gemini inline limit is similar).
   let buffer, contentType;
   try {
     ({ buffer, contentType } = await safeFetchBuffer(audioUrl, { maxBytes: 25 * 1024 * 1024, timeoutMs: 60000 }));
@@ -327,33 +331,24 @@ async function handlePodcastTranscribe(req, res, user) {
     throw e;
   }
 
-  const form = new FormData();
-  form.append('model', 'whisper-1');
-  form.append('response_format', 'text');
-  form.append('file', new Blob([buffer], { type: contentType || 'audio/mpeg' }), 'episode.mp3');
-
-  let oaRes;
-  try {
-    oaRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form, signal: AbortSignal.timeout(180000)
-    });
-  } catch (e) {
-    throw { status: 504, message: 'Transcription request timed out. Try a shorter episode.' };
+  let textOut = '', lastErr = null, usedProvider = '';
+  for (const p of available) {
+    const key = sec.decryptKey(user.keys[p]);
+    if (!key) continue;
+    try {
+      const t = await providers.transcribe(p, key, buffer, contentType);
+      if (t && t.length >= 10) { textOut = t; usedProvider = p; break; }
+    } catch (e) {
+      lastErr = e; // try the next provider
+    }
   }
-  if (!oaRes.ok) {
-    const errJson = await oaRes.json().catch(() => ({}));
-    const msg = (errJson.error && errJson.error.message) || `HTTP ${oaRes.status}`;
-    if (oaRes.status === 401) throw { status: 401, message: `OpenAI rejected your key: ${msg}` };
-    throw { status: 502, message: `Transcription failed: ${msg}` };
-  }
-  const textOut = (await oaRes.text()).trim();
-  if (!textOut || textOut.length < 10) throw { status: 422, message: 'Transcription produced no usable text.' };
+  if (!textOut) throw lastErr || { status: 422, message: 'Transcription produced no usable text.' };
   if (looksNSFW(textOut.slice(0, 4000))) throw { status: 451, message: 'This transcript was flagged as explicit and was blocked.' };
 
   if (plan === 'free') { bumpFeature(user, 'transcribe'); }
   pushHistory(user, { feature: 'transcribe', at: new Date().toISOString(), preview: textOut.slice(0, 80) });
   await store.saveUser(user);
-  sendJSON(res, 200, { text: textOut.slice(0, 200000) });
+  sendJSON(res, 200, { text: textOut.slice(0, 200000), provider: usedProvider });
 }
 
 // Fetch one transcript file and return clean plain text.

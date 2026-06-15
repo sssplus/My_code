@@ -48,7 +48,9 @@ Set these on your host (see `backend/.env.example`):
   `expired` and prompts for a plan.
 - After expiry, the **Free** plan still works with per-day caps (server-enforced):
   generations 5, Script Studio 5, Miner 10 sections, AI Stack audits 2,
-  Auto-Repurpose agent 8 calls (~1 run), Music briefs 5, chat 15.
+  Auto-Repurpose agent 8 calls (~1 run), Music briefs 5, chat 15, audio
+  transcripts 2. Transcription (speech-to-text) works with the user's OpenAI,
+  Groq, or Gemini key (whichever they connect, with fallback).
 - Tools (each its own routed page, e.g. `/#/agent`): Generator, Auto-Repurpose
   Agent, Discover (podcast search), Transcripts (RSS transcript puller),
   Script Studio, Content Miner, AI Stack Tracker, Background Music Brief,

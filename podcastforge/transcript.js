@@ -94,7 +94,7 @@
           <input id="tr-feed" class="tr-input" type="text" placeholder="Apple/Spotify/YouTube link, an RSS URL, or a show name — or click “Transcripts” on a Discover result" value="${esc(state.feedUrl)}">
           <button class="tr-btn ${loading ? 'loading' : ''}" id="tr-load" ${loading ? 'disabled' : ''}>${loading ? 'Loading…' : 'Load episodes'}</button>
         </div>
-        <div class="tr-hint">Paste an Apple/Spotify/YouTube link, an RSS URL, or a show name. Episodes that publish a transcript can be pulled; others can be generated from audio with your OpenAI (Whisper) key. Explicit/NSFW shows are blocked.</div>
+        <div class="tr-hint">Paste an Apple/Spotify/YouTube link, an RSS URL, or a show name. Episodes that publish a transcript can be pulled; others can be generated from audio with your OpenAI, Groq, or Gemini key. Explicit/NSFW shows are blocked.</div>
       </div>`;
 
     if (error) html += `<div class="tr-error">${esc(error)}</div>`;
@@ -107,7 +107,7 @@
         if (ep.hasTranscript) {
           action = `<button class="tr-pull" ${busy ? 'disabled' : ''} onclick="transcriptPull(${i})">${busy ? 'Pulling…' : 'Get transcript'}</button>`;
         } else if (ep.audioUrl) {
-          action = `<button class="tr-pull tr-whisper" ${busy ? 'disabled' : ''} onclick="transcriptTranscribe(${i})" title="Transcribe the audio with your OpenAI (Whisper) key">${busy ? 'Transcribing…' : '✨ Generate from audio'}</button>`;
+          action = `<button class="tr-pull tr-whisper" ${busy ? 'disabled' : ''} onclick="transcriptTranscribe(${i})" title="Transcribe the audio with your OpenAI, Groq, or Gemini key">${busy ? 'Transcribing…' : '✨ Generate from audio'}</button>`;
         } else {
           action = `<span class="tr-none">no audio</span>`;
         }
