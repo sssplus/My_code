@@ -23,13 +23,19 @@
     <div class="nav-links" id="navbar-links">
       <a href="#landing-hero" class="nav-landing-only">Home</a>
       <a href="#landing-features" class="nav-landing-only">Features</a>
-      <a href="#studio" class="nav-workspace-only" style="display: none;">Script Studio</a>
-      <a href="#app" class="nav-workspace-only" style="display: none;">Generator</a>
-      <a href="#miner" class="nav-workspace-only" style="display: none;">Miner</a>
-      <a href="#tools">AI Stack Tracker</a>
-      <a href="#pricing">Pricing</a>
+      <a href="#/generator" class="nav-workspace-only nav-route" style="display: none;">Generator</a>
+      <a href="#/agent" class="nav-workspace-only nav-route" style="display: none;">Agent</a>
+      <a href="#/discover" class="nav-workspace-only nav-route" style="display: none;">Discover</a>
+      <a href="#/transcripts" class="nav-workspace-only nav-route" style="display: none;">Transcripts</a>
+      <a href="#/studio" class="nav-workspace-only nav-route" style="display: none;">Script Studio</a>
+      <a href="#/miner" class="nav-workspace-only nav-route" style="display: none;">Miner</a>
+      <a href="#/tracker" class="nav-workspace-only nav-route" style="display: none;">Tracker</a>
+      <a href="#/music" class="nav-workspace-only nav-route" style="display: none;">Music</a>
+      <a href="#/templates" class="nav-workspace-only nav-route" style="display: none;">Covers</a>
+      <a href="#pricing" onclick="return app.onPricingNav(event)">Pricing</a>
     </div>
     <div class="nav-right">
+      <span id="nav-account" class="nav-account" style="display: none;" onclick="app.openAccount()" title="Account, usage & history"></span>
       <div id="nav-trial-badge" class="trial-badge" style="display: none;">15d trial</div>
       <div id="nav-plan-badge" class="plan-badge plan-trial" style="display: none;">TRIAL</div>
       <div class="currency-toggle" id="nav-currency-toggle" style="display: none;">
@@ -100,8 +106,8 @@
       <!-- Provider marquee -->
       <div class="provider-marquee" aria-hidden="true">
         <div class="marquee-track">
-          <span>🟣 Anthropic Claude</span><span>🔵 Google Gemini</span><span>🟠 OpenRouter</span><span>🟢 NVIDIA NIM</span><span>⚪ OpenAI</span><span>·</span>
-          <span>🟣 Anthropic Claude</span><span>🔵 Google Gemini</span><span>🟠 OpenRouter</span><span>🟢 NVIDIA NIM</span><span>⚪ OpenAI</span><span>·</span>
+          <span>🟣 Anthropic Claude</span><span>🔵 Google Gemini</span><span>🟠 OpenRouter</span><span>🟢 NVIDIA NIM</span><span>🟠 Groq</span><span>⚪ OpenAI</span><span>·</span>
+          <span>🟣 Anthropic Claude</span><span>🔵 Google Gemini</span><span>🟠 OpenRouter</span><span>🟢 NVIDIA NIM</span><span>🟠 Groq</span><span>⚪ OpenAI</span><span>·</span>
         </div>
       </div>
     </header>
@@ -165,7 +171,7 @@
     </div>
 
     <!-- Podcast Cover Templates -->
-    <div style="max-width: 1140px; margin: 0 auto; padding: 30px 24px 10px;">
+    <div id="templates" class="ws-page" data-route="templates" style="max-width: 1140px; margin: 0 auto; padding: 30px 24px 10px;">
       <div class="templates-section">
         <div class="templates-header">
           <div class="section-label" style="color: var(--accent-cyan);">Creative Assets</div>
@@ -219,8 +225,32 @@
       </div>
     </div>
 
+    <!-- Discover Podcasts Section -->
+    <section id="discover" class="ws-page" data-route="discover" style="max-width:1140px; margin:0 auto; padding:30px 24px 10px;">
+      <div style="text-align:center; margin-bottom:28px;">
+        <div class="section-label" style="color:var(--accent-cyan);">Discover</div>
+        <h2 class="section-title" style="font-size:24px;">Find Podcasts by Field</h2>
+        <p class="section-sub" style="font-size:14px; max-width:640px; margin:0 auto;">Search the podcast catalog by topic or category for inspiration and research. Explicit-flagged shows are filtered out.</p>
+      </div>
+      <div id="discover-container">
+        <div style="padding:40px; text-align:center; color:var(--text-muted); font-family:monospace;">Loading discovery…</div>
+      </div>
+    </section>
+
+    <!-- Transcript Puller Section -->
+    <section id="transcripts" class="ws-page" data-route="transcripts" style="max-width:1140px; margin:0 auto; padding:30px 24px 10px;">
+      <div style="text-align:center; margin-bottom:28px;">
+        <div class="section-label" style="color:var(--accent-cyan);">Source Text</div>
+        <h2 class="section-title" style="font-size:24px;">Pull a Transcript</h2>
+        <p class="section-sub" style="font-size:14px; max-width:640px; margin:0 auto;">Paste an Apple/Spotify/YouTube link, an RSS URL, or a show name. Pull published transcripts, or generate one from the audio with your OpenAI key — then send it to the Generator, Agent, or Miner. Explicit/NSFW shows are blocked.</p>
+      </div>
+      <div id="transcript-container">
+        <div style="padding:40px; text-align:center; color:var(--text-muted); font-family:monospace;">Loading transcript tool…</div>
+      </div>
+    </section>
+
     <!-- Script Studio Section -->
-    <section id="studio" style="max-width:1140px; margin:0 auto; padding:30px 24px 10px;">
+    <section id="studio" class="ws-page" data-route="studio" style="max-width:1140px; margin:0 auto; padding:30px 24px 10px;">
       <div style="text-align:center; margin-bottom:28px;">
         <div class="section-label" style="color:var(--accent-violet2);">Script Studio</div>
         <h2 class="section-title" style="font-size:24px;">Pro Script &amp; Video Prompt Templates</h2>
@@ -232,13 +262,13 @@
     </section>
 
     <!-- App Section -->
-    <section id="app">
+    <section id="app" class="ws-page" data-route="generator">
       <div class="api-bar">
         <div class="api-icon">🔑</div>
-        <input type="password" id="api-key-input" placeholder="Paste your Anthropic, Gemini, OpenRouter, or OpenAI API key here..." autocomplete="off" spellcheck="false">
+        <input type="password" id="api-key-input" placeholder="Paste your Anthropic, Gemini, OpenRouter, OpenAI, Groq, or NVIDIA API key here..." autocomplete="off" spellcheck="false">
         <div id="provider-badge" class="provider-badge none">No key detected</div>
       </div>
-      <div class="api-key-note">🔒 Your key is stored only in this browser and sent directly to your AI provider — never to our servers or any proxy.</div>
+      <div class="api-key-note" id="api-key-note">🔒 Your key is stored only in this browser and sent directly to your AI provider — never to our servers or any proxy.</div>
 
       <div class="app-grid" style="grid-template-columns: 1fr 1.5fr;">
         <!-- Left: Input Panel -->
@@ -272,9 +302,9 @@
         </div>
 
         <!-- Right: Output & Chat Panel -->
-        <div class="panel" style="display: flex; flex-direction: row; min-height: 500px;">
+        <div class="panel" style="display: flex; flex-direction: row; height: min(680px, calc(100vh - 150px)); min-height: 460px;">
           <!-- Output Area -->
-          <div style="flex: 1; display: flex; flex-direction: column; min-width: 0;">
+          <div style="flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0;">
             <div class="tabs" id="output-tabs">
               <button class="tab-btn active" data-target="tab-blog">Blog Post <span class="tab-badge">✓</span></button>
               <button class="tab-btn" data-target="tab-twitter">Twitter <span class="tab-badge">✓</span></button>
@@ -306,11 +336,11 @@
           </div>
 
           <!-- Chat Assistant Sidebar -->
-          <div style="width: 280px; border-left: 1px solid var(--border); display: flex; flex-direction: column; background: rgba(0,0,0,0.2);">
+          <div style="width: 280px; border-left: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; background: rgba(0,0,0,0.2);">
             <div style="padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
               <span>💬</span> Refine Output
             </div>
-            <div id="chat-history" style="flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; font-size: 13px;">
+            <div id="chat-history" style="flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; font-size: 13px;">
               <div style="color: var(--text-muted); text-align: center; font-size: 12px; margin-top: 20px;">
                 Ask the AI to rewrite, expand, or tweak the generated content.
               </div>
@@ -323,11 +353,26 @@
         </div>
       </div>
     </section>
-  </main>
-</div> <!-- Close workspace-view -->
+    <!-- Auto-Repurpose Agent Section -->
+    <section id="agent" class="ws-page" data-route="agent" style="max-width:1140px; margin:0 auto; padding:10px 24px;">
+      <div style="text-align:center; margin-bottom:28px;">
+        <div class="section-label" style="color:var(--accent-violet2);">One-click</div>
+        <h2 class="section-title" style="font-size:24px;">Auto-Repurpose Agent</h2>
+        <p class="section-sub" style="font-size:14px; max-width:640px; margin:0 auto;">Paste an episode and the agent plans a content pack, then writes every piece for you — blog, threads, LinkedIn, show notes and more, in one run.</p>
+      </div>
+      <div id="agent-container">
+        <div style="padding:40px; text-align:center; color:var(--text-muted); font-family:monospace;">Loading agent…</div>
+        <div id="agent-lock" class="feature-lock" style="display:none;">
+          <div class="lock-icon">🔒</div>
+          <div class="lock-title">Your trial has ended</div>
+          <div class="lock-sub">Choose a plan to keep using the agent. The Free plan includes ~1 full run/day.</div>
+          <button class="lock-cta" onclick="app.showPaywall()">Choose a plan</button>
+        </div>
+      </div>
+    </section>
 
-    <!-- Long-Episode Content Miner Section -->
-    <section id="miner">
+    <!-- Long-Episode Content Miner Section (inside workspace: shown after login) -->
+    <section id="miner" class="ws-page" data-route="miner">
       <div style="text-align:center; margin-bottom:40px;">
         <div class="section-label">The Engine</div>
         <h2 class="section-title">Long-Episode Content Miner</h2>
@@ -344,18 +389,18 @@
           Loading engine…
         </div>
 
-        <!-- Pro-gate overlay (toggled by updateLocks in app.js) -->
+        <!-- Shown only when the trial has expired (free plan keeps daily-capped access) -->
         <div id="miner-lock" class="feature-lock" style="display:none;">
           <div class="lock-icon">🔒</div>
-          <div class="lock-title">The Content Miner is a Pro feature</div>
-          <div class="lock-sub">Upgrade to mine full-length episodes for postable moments.</div>
-          <button class="lock-cta" onclick="app.showPaywall()">Unlock Pro</button>
+          <div class="lock-title">Your trial has ended</div>
+          <div class="lock-sub">Choose a plan to keep mining. The Free plan includes 10 mined sections/day.</div>
+          <button class="lock-cta" onclick="app.showPaywall()">Choose a plan</button>
         </div>
       </div>
     </section>
 
     <!-- AI Stack Tracker Section -->
-    <section id="tools">
+    <section id="tools" class="ws-page" data-route="tracker">
       <div style="text-align: center; margin-bottom: 40px;">
         <div class="section-label">Bonus Tool</div>
         <h2 class="section-title">AI Stack Tracker</h2>
@@ -368,12 +413,32 @@
 
         <div id="tracker-lock" class="feature-lock" style="display: none;">
           <div class="lock-icon">🔒</div>
-          <div class="lock-title">AI Stack Tracker is a Pro feature</div>
-          <div class="lock-sub">Upgrade to track and audit your AI spend.</div>
-          <button class="lock-cta" onclick="app.showPaywall()">Unlock Pro</button>
+          <div class="lock-title">Your trial has ended</div>
+          <div class="lock-sub">Choose a plan to keep auditing. The Free plan includes 2 audits/day.</div>
+          <button class="lock-cta" onclick="app.showPaywall()">Choose a plan</button>
         </div>
       </div>
     </section>
+
+    <!-- Background Music Brief Section -->
+    <section id="music" class="ws-page" data-route="music" style="max-width:1140px; margin:0 auto; padding:10px 24px 60px;">
+      <div style="text-align:center; margin-bottom:28px;">
+        <div class="section-label" style="color:var(--accent-cyan);">Creative Assets</div>
+        <h2 class="section-title" style="font-size:24px;">Background Music Brief</h2>
+        <p class="section-sub" style="font-size:14px; max-width:640px; margin:0 auto;">Get a per-segment music brief — mood, genre, tempo and keywords — plus one-click searches into royalty-free libraries. No audio is generated, so licensing stays clean.</p>
+      </div>
+      <div id="music-container">
+        <div style="padding:40px; text-align:center; color:var(--text-muted); font-family:monospace;">Loading music brief…</div>
+        <div id="music-lock" class="feature-lock" style="display:none;">
+          <div class="lock-icon">🔒</div>
+          <div class="lock-title">Your trial has ended</div>
+          <div class="lock-sub">Choose a plan to keep building music briefs. The Free plan includes 5/day.</div>
+          <button class="lock-cta" onclick="app.showPaywall()">Choose a plan</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</div> <!-- Close workspace-view -->
 
     <!-- Pricing Section -->
     <section id="pricing">
@@ -392,11 +457,11 @@
             <div class="plan-price"><sup class="price-cur">$</sup><span class="price-val" data-usd="0" data-inr="0">0</span></div>
             <div class="plan-period">forever</div>
             <ul class="plan-features">
-              <li><span class="check">✓</span> 5 generations per day</li>
+              <li><span class="check">✓</span> 5 script/content generations per day</li>
+              <li><span class="check">✓</span> Content Miner — 10 sections/day</li>
+              <li><span class="check">✓</span> AI Stack audits — 2/day</li>
               <li><span class="check">✓</span> Bring your own API key</li>
-              <li><span class="check">✓</span> All 4 content formats</li>
               <li><span class="cross">✕</span> No transcript AI tools</li>
-              <li><span class="cross">✕</span> No AI Stack Tracker</li>
             </ul>
             <button class="btn-plan btn-plan-outline" onclick="app.selectPlan('free')">Choose Free</button>
           </div>
@@ -455,7 +520,7 @@
         <div class="modal-plan-card">
           <div class="modal-plan-name">Free</div>
           <div class="modal-plan-price"><sup class="price-cur">$</sup><span class="price-val" data-usd="0" data-inr="0">0</span></div>
-          <div class="modal-plan-desc">5 generations per day. No pro tools.</div>
+          <div class="modal-plan-desc">Daily-capped access: 5 generations, 10 miner sections, 2 audits per day.</div>
           <ul class="modal-plan-perks">
             <li><span class="chk">✓</span> Bring your own key</li>
           </ul>
@@ -483,55 +548,56 @@
     </div>
   </div>
 
-  <!-- Glassmorphic Login Gateway Modal -->
+  <!-- Auth Modal (Create account / Sign in) -->
   <div id="auth-modal" class="auth-overlay">
     <div class="auth-card">
       <button class="auth-close-btn" onclick="app.hideAuthModal()">&times;</button>
+
+      <!-- Mode toggle -->
+      <div class="auth-tabs">
+        <button id="auth-tab-signup" class="auth-tab active" onclick="app.setAuthMode('signup')">Create account</button>
+        <button id="auth-tab-signin" class="auth-tab" onclick="app.setAuthMode('signin')">Sign in</button>
+      </div>
+
       <div class="auth-header">
-        <span class="logo">🎙️</span>
-        <h3 class="auth-title">Enter Workspace</h3>
-        <p class="auth-subtitle">Sign in to access your generator dashboard.</p>
+        <h3 class="auth-title" id="auth-title">Create your account</h3>
+        <p class="auth-subtitle" id="auth-subtitle">New here? Create an account to start your free 15-day trial — full access, no card required.</p>
       </div>
 
       <!-- SSO Options -->
       <div class="sso-row">
-        <button class="btn-sso" onclick="app.simulateSSO('Google')">
+        <button class="btn-sso" id="btn-sso-google" onclick="app.loginWithProvider('Google')">
           <svg viewBox="0 0 24 24">
             <path d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.136 4.114A5.79 5.79 0 018.2 12.725a5.79 5.79 0 015.79-5.79c2.5 0 4.5 1.576 5.234 3.793l3.968-3.076C20.89 3.518 16.812 1 12 1 5.925 1 1 5.925 1 12s4.925 11 11 11c5.738 0 10.45-4.148 10.93-9.5H12.24z"/>
           </svg>
           Google
         </button>
-        <button class="btn-sso" onclick="app.simulateSSO('GitHub')">
+        <button class="btn-sso" id="btn-sso-github" onclick="app.loginWithProvider('GitHub')">
           <svg viewBox="0 0 24 24">
             <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
           </svg>
           GitHub
         </button>
       </div>
+      <div id="sso-hint" class="sso-hint" style="display:none;">Social login isn’t set up on this server yet — use email below.</div>
 
-      <div class="sso-divider">Or sign in with email</div>
+      <div class="sso-divider">or with email</div>
 
       <div class="input-group">
-        <input type="text" id="auth-email" placeholder="Email" required autocomplete="email" value="creator@podcastforge.com">
-        <label for="auth-email">Username or Email</label>
+        <input type="email" id="auth-email" placeholder=" " required autocomplete="email">
+        <label for="auth-email">Email</label>
       </div>
 
-      <div class="input-group">
-        <input type="password" id="auth-password" placeholder="Password" required autocomplete="current-password">
+      <div class="input-group" style="margin-bottom:8px;">
+        <input type="password" id="auth-password" placeholder=" " required autocomplete="new-password">
         <label for="auth-password">Password</label>
       </div>
+      <div id="auth-hint" class="auth-hint">Use at least 8 characters.</div>
 
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; font-size:12.5px; color:var(--text-secondary);">
-        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
-          <input type="checkbox" id="auth-remember" checked style="accent-color:var(--accent-violet);"> Remember me
-        </label>
-        <a href="#" onclick="alert('Simulation: Enter anything to sign in!'); return false;" style="color:var(--accent-violet2); text-decoration:none;">Forgot details?</a>
-      </div>
+      <button class="auth-btn-primary" id="auth-submit" onclick="app.submitAuth()">Create account &amp; start trial</button>
 
-      <button class="auth-btn-primary" onclick="app.handleAuthSubmit()">Sign In & Enter</button>
-
-      <div class="auth-footer-links">
-        New creator? <a href="#" onclick="app.startFreeTrialAuth(); return false;">Start 15-day Trial</a>
+      <div class="auth-footer-links" id="auth-switch">
+        Already have an account? <a href="#" onclick="app.setAuthMode('signin'); return false;">Sign in</a>
       </div>
     </div>
   </div>
@@ -560,8 +626,19 @@
       </div>
       <div style="padding: 20px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:10px;">
         <button class="btn-modal-free" style="padding: 8px 16px; border-radius:6px; font-weight:600; cursor:pointer; width:auto;" onclick="app.hideTemplate()">Close</button>
-        <button class="btn-modal-pay" style="padding: 8px 16px; border-radius:6px; font-weight:600; cursor:pointer; width:auto;" onclick="app.downloadTemplate()">Use Template</button>
+        <button class="btn-modal-pay" style="padding: 8px 16px; border-radius:6px; font-weight:600; cursor:pointer; width:auto;" onclick="app.downloadTemplate()">⬇ Download Cover (PNG)</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Account Modal -->
+  <div id="account-modal" class="modal-overlay" onclick="app.closeAccount()">
+    <div class="modal" style="max-width:560px; max-height:86vh; overflow:auto;" onclick="event.stopPropagation()">
+      <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 class="modal-title">Your Account</h3>
+        <button onclick="app.closeAccount()" style="background:none; border:none; color:var(--text-muted); font-size:24px; cursor:pointer;">&times;</button>
+      </div>
+      <div id="account-body" style="padding:0 24px 24px;"></div>
     </div>
   </div>
 
@@ -575,5 +652,11 @@
   <script src="tracker.js"></script>
   <script src="engine.js"></script>
   <script src="studio.js"></script>
+  <script src="agent.js"></script>
+  <script src="music-library.js"></script>
+  <script src="music.js"></script>
+  <script src="discover.js"></script>
+  <script src="transcript.js"></script>
+  <script src="router.js"></script>
 </body>
 </html>

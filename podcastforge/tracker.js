@@ -153,7 +153,7 @@ Shape required: {"summary": "two-sentence overall assessment", "estimatedMonthly
 Be specific about functional overlap between the actual tools listed. One verdict per tool.`;
 
   try {
-    const res = await window.app.callAI(sysPrompt, userPrompt);
+    const res = await window.app.callAI(sysPrompt, userPrompt, 'tracker');
     const parsed = window.safeParseJSON
       ? window.safeParseJSON(res)
       : JSON.parse(res.replace(/```json|```/g, "").trim());

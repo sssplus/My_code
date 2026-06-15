@@ -16,12 +16,13 @@ const PROVIDER_MODELS = {
   gemini: ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.5-flash-lite'],
   openrouter: ['google/gemini-2.5-flash', 'meta-llama/llama-3.3-70b-instruct:free', 'deepseek/deepseek-chat-v3-0324:free'],
   nvidia: ['meta/llama-3.3-70b-instruct', 'meta/llama-3.1-70b-instruct', 'mistralai/mixtral-8x22b-instruct-v0.1'],
+  groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'openai/gpt-oss-20b'],
   openai: ['gpt-4o', 'gpt-4o-mini']
 };
 
 const LABELS = {
   anthropic: 'Anthropic', gemini: 'Google Gemini', openrouter: 'OpenRouter',
-  nvidia: 'NVIDIA NIM', openai: 'OpenAI'
+  nvidia: 'NVIDIA NIM', groq: 'Groq', openai: 'OpenAI'
 };
 
 function detectProvider(key) {
@@ -30,6 +31,7 @@ function detectProvider(key) {
   if (k.startsWith('AIza') || k.startsWith('AQ.')) return 'gemini';
   if (k.startsWith('sk-or-')) return 'openrouter';
   if (k.startsWith('nvapi-')) return 'nvidia';
+  if (k.startsWith('gsk_')) return 'groq';
   return 'openai';
 }
 
@@ -70,6 +72,16 @@ function buildRequest(provider, model, key, system, user) {
       body: JSON.stringify({
         model, messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
         temperature: 0.5, max_tokens: 4000
+      })
+    };
+  }
+  if (provider === 'groq') {
+    return {
+      url: 'https://api.groq.com/openai/v1/chat/completions',
+      headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model, messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+        temperature: 0.6, max_tokens: 4000
       })
     };
   }
@@ -150,4 +162,54 @@ async function callAI(provider, key, system, user) {
   throw lastError;
 }
 
-module.exports = { callAI, detectProvider, LABELS, PROVIDER_MODELS };
+/* ── Speech-to-text (audio → transcript) ──────────────────
+   Works with whichever key the user has, in this order:
+   OpenAI Whisper, Groq Whisper (OpenAI-compatible), then Gemini
+   multimodal. (Anthropic/NVIDIA don't offer simple audio STT.) */
+const STT_ORDER = ['openai', 'groq', 'gemini'];
+
+async function transcribe(provider, key, buffer, contentType) {
+  if (provider === 'openai' || provider === 'groq') {
+    const url = provider === 'groq'
+      ? 'https://api.groq.com/openai/v1/audio/transcriptions'
+      : 'https://api.openai.com/v1/audio/transcriptions';
+    const model = provider === 'groq' ? 'whisper-large-v3-turbo' : 'whisper-1';
+    const form = new FormData();
+    form.append('model', model);
+    form.append('response_format', 'text');
+    form.append('file', new Blob([buffer], { type: contentType || 'audio/mpeg' }), 'episode.mp3');
+    const res = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form, signal: AbortSignal.timeout(180000) });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      const msg = (j.error && j.error.message) || `HTTP ${res.status}`;
+      throw { status: res.status === 401 ? 401 : 502, message: `${LABELS[provider]}: ${msg}` };
+    }
+    return (await res.text()).trim();
+  }
+  if (provider === 'gemini') {
+    const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({
+        contents: [{ parts: [
+          { inline_data: { mime_type: contentType || 'audio/mpeg', data: buffer.toString('base64') } },
+          { text: 'Transcribe this audio verbatim. Return only the transcript text, no commentary.' }
+        ] }]
+      }),
+      signal: AbortSignal.timeout(180000)
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      const msg = (j.error && j.error.message) || `HTTP ${res.status}`;
+      throw { status: (res.status === 401 || res.status === 403) ? 401 : 502, message: `Google Gemini: ${msg}` };
+    }
+    const data = await res.json();
+    const cand = data.candidates && data.candidates[0];
+    const text = cand && cand.content && cand.content.parts && cand.content.parts.map(p => p.text || '').join('');
+    if (!text) throw { status: 502, message: 'Gemini returned no transcript (audio may be too long).' };
+    return text.trim();
+  }
+  throw { status: 400, message: 'Unsupported transcription provider.' };
+}
+
+module.exports = { callAI, transcribe, detectProvider, LABELS, PROVIDER_MODELS, STT_ORDER };

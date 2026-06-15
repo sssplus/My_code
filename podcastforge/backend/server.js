@@ -23,12 +23,35 @@ const path = require('path');
 const sec = require('./lib/security');
 const store = require('./lib/store');
 const providers = require('./lib/providers');
+const oauth = require('./lib/oauth');
+const { safeFetchText, safeFetchBuffer } = require('./lib/safefetch');
+const rss = require('./lib/rss');
+
+// Conservative NSFW guard for pulled podcasts (in addition to the iTunes/RSS
+// explicit flags). Kept tight to avoid flagging legitimate shows.
+// Word-boundary patterns (not substring) so legitimate titles like
+// "Fetishizing productivity" or a literary discussion of "erotica" aren't
+// false-positive blocked. The primary gate is still the itunes:explicit flag
+// and adult category; this is a backstop for unambiguous adult terms.
+const NSFW_PATTERNS = [/\bxxx\b/i, /\bhardcore\s+porn\b/i, /\bpornhub\b/i, /\bonlyfans\b/i, /\bnsfw\b/i, /\bexplicit\s+sex\b/i, /\bcamgirl\b/i, /\bporn\b/i];
+const NSFW_CATEGORIES = ['sexually explicit', 'adult'];
+function looksNSFW(text) {
+  const t = String(text || '');
+  return NSFW_PATTERNS.some(re => re.test(t));
+}
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, '..');           // serves podcastforge/
 const MAX_BODY = 200 * 1024;                              // 200 KB JSON cap
 const FREE_DAILY_LIMIT = 5;
 const TRIAL_DAYS = 15;
+
+// Per-feature daily caps for the FREE plan. trial/fixed/payg are unlimited.
+// Each unit is one AI call: the Miner makes one call per transcript section,
+// so its cap is measured in sections; Generator/Studio/Tracker are 1 call each.
+const FREE_LIMITS = { generate: 5, studio: 5, miner: 10, tracker: 2, agent: 8, music: 5, chat: 15, transcribe: 2 };
+const FEATURES = Object.keys(FREE_LIMITS);
+const FEATURE_LABEL = { generate: 'content generation', studio: 'Script Studio', miner: 'the Content Miner', tracker: 'the AI Stack audit', agent: 'the Auto-Repurpose agent', music: 'the Music Brief', chat: 'the chat assistant', transcribe: 'audio transcription' };
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -85,17 +108,50 @@ function daysLeft(user) {
   return Math.max(0, TRIAL_DAYS - days);
 }
 
+// Per-feature daily usage helpers (reset each day)
+function featureUsageToday(user) {
+  const t = today();
+  const fu = user.featureUsage && user.featureUsage.date === t ? user.featureUsage : { date: t };
+  const out = {};
+  FEATURES.forEach(f => { out[f] = fu[f] || 0; });
+  return out;
+}
+function featureCount(user, feature) {
+  const t = today();
+  if (!user.featureUsage || user.featureUsage.date !== t) return 0;
+  return user.featureUsage[feature] || 0;
+}
+function bumpFeature(user, feature) {
+  const t = today();
+  if (!user.featureUsage || user.featureUsage.date !== t) user.featureUsage = { date: t };
+  user.featureUsage[feature] = (user.featureUsage[feature] || 0) + 1;
+}
+// Activity + billing history (newest first, capped). The preview is the user's
+// own prompt snippet, shown only back to them.
+function pushHistory(user, rec) {
+  user.history = Array.isArray(user.history) ? user.history : [];
+  user.history.unshift(rec);
+  if (user.history.length > 50) user.history.length = 50;
+}
+function pushTransaction(user, rec) {
+  user.transactions = Array.isArray(user.transactions) ? user.transactions : [];
+  user.transactions.unshift(rec);
+  if (user.transactions.length > 50) user.transactions.length = 50;
+}
+
 // Public view of a user — never leaks password hash or stored keys
 function publicUser(user) {
   const plan = effectivePlan(user);
-  const usage = user.usage && user.usage.date === today() ? user.usage.count : 0;
+  const usage = featureUsageToday(user);
   return {
     id: user.id,
     email: user.email,
     plan,
     daysLeft: daysLeft(user),
-    usageToday: usage,
-    freeLimit: FREE_DAILY_LIMIT,
+    usage,                       // { generate, studio, miner, tracker } counts today
+    freeLimits: FREE_LIMITS,     // caps that apply on the free plan
+    usageToday: usage.generate,  // back-compat for existing UI
+    freeLimit: FREE_LIMITS.generate,
     providers: Object.keys(user.keys || {})
   };
 }
@@ -135,6 +191,14 @@ function handleMe(req, res, user) {
   sendJSON(res, 200, { user: publicUser(user) });
 }
 
+function handleAccount(req, res, user) {
+  sendJSON(res, 200, {
+    user: publicUser(user),
+    history: (user.history || []).slice(0, 30),
+    transactions: (user.transactions || []).slice(0, 30)
+  });
+}
+
 async function handleSaveKey(req, res, user) {
   const { key } = await readBody(req);
   const k = String(key || '').trim();
@@ -150,6 +214,183 @@ function handleListKeys(req, res, user) {
   sendJSON(res, 200, { providers: Object.keys(user.keys || {}) });
 }
 
+// Podcast discovery via Apple's free iTunes Search API (no key). Done
+// server-side to avoid CORS and to enforce a content filter centrally:
+// explicit-flagged shows are dropped so users can't pull NSFW podcasts.
+// Resolve a user-supplied link (Apple/Spotify/YouTube/any page) or a bare
+// podcast name to an RSS feed URL. Podcasts are RSS under the hood; the various
+// directories are just players over the same feeds, so we map back to the feed:
+//   - Apple URL  -> iTunes lookup by show id
+//   - RSS/Atom   -> use as-is
+//   - other page -> read its <title>/og:title, then iTunes-search by that name
+//   - bare text  -> iTunes-search by name
+async function itunesSearchFeed(term) {
+  const url = `https://itunes.apple.com/search?media=podcast&entity=podcast&limit=1&term=${encodeURIComponent(term)}`;
+  try {
+    const r = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(12000) });
+    const d = await r.json();
+    const hit = (d.results || []).find(x => x.feedUrl);
+    return hit ? { feedUrl: hit.feedUrl, name: hit.collectionName } : null;
+  } catch (e) { return null; }
+}
+async function resolveToFeed(input) {
+  const raw = String(input || '').trim();
+  if (!raw) throw { status: 400, message: 'Provide a podcast link, RSS URL, or name.' };
+
+  // Not a URL → treat as a search term.
+  if (!/^https?:\/\//i.test(raw)) {
+    const hit = await itunesSearchFeed(raw);
+    if (!hit) throw { status: 404, message: 'No podcast found by that name.' };
+    return hit.feedUrl;
+  }
+
+  // Apple Podcasts URL → look up the feed by show id.
+  const appleId = raw.match(/podcasts\.apple\.com\/.*\/id(\d+)/i) || raw.match(/[?&]i=(\d+)/);
+  if (/podcasts\.apple\.com/i.test(raw) && appleId) {
+    try {
+      const r = await fetch(`https://itunes.apple.com/lookup?id=${appleId[1]}&entity=podcast`, { signal: AbortSignal.timeout(12000) });
+      const d = await r.json();
+      const hit = (d.results || []).find(x => x.feedUrl);
+      if (hit) return hit.feedUrl;
+    } catch (e) { /* fall through */ }
+  }
+
+  // Fetch the URL; if it's already an RSS/Atom feed, use it directly.
+  const { text, contentType } = await safeFetchText(raw, { maxBytes: 3 * 1024 * 1024, timeoutMs: 15000 });
+  const head = text.slice(0, 2000).toLowerCase();
+  if (contentType.includes('xml') || contentType.includes('rss') || /<rss\b|<feed\b|<\?xml/.test(head)) {
+    return raw;
+  }
+
+  // Otherwise it's a web page (Spotify/YouTube/etc.) — pull a title and search Apple.
+  const og = text.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i);
+  const title = (og && og[1]) || (text.match(/<title[^>]*>([^<]+)<\/title>/i) || [])[1] || '';
+  const cleaned = title.replace(/\s*[-|·]\s*(spotify|youtube|apple podcasts|amazon music).*$/i, '').trim();
+  if (cleaned) {
+    const hit = await itunesSearchFeed(cleaned);
+    if (hit) return hit.feedUrl;
+  }
+  throw { status: 422, message: 'Could not find an RSS feed for that link. Try the show’s name or its RSS URL.' };
+}
+
+// List episodes from a podcast (resolved from any link/name) — flags which have
+// published transcripts and which can be transcribed from audio.
+async function handlePodcastEpisodes(req, res, user, query) {
+  const input = String(query.feedUrl || '').trim();
+  if (!input) throw { status: 400, message: 'Provide a podcast link, RSS URL, or name.' };
+  const feedUrl = await resolveToFeed(input);
+  const { text } = await safeFetchText(feedUrl, { maxBytes: 5 * 1024 * 1024, timeoutMs: 15000 });
+  const feed = rss.parseFeed(text);
+
+  // Whole-feed NSFW gate
+  if (feed.explicit || feed.categories.some(c => NSFW_CATEGORIES.includes(c.toLowerCase())) || looksNSFW(feed.title)) {
+    throw { status: 451, message: 'This podcast is marked explicit/adult and can’t be pulled here.' };
+  }
+
+  const episodes = feed.items
+    .filter(it => !it.explicit && !looksNSFW(it.title) && !looksNSFW(it.description))
+    .slice(0, 25)
+    .map(it => ({
+      title: it.title,
+      description: it.description,
+      pubDate: it.pubDate,
+      hasTranscript: !!it.transcriptUrl,
+      transcriptUrl: it.transcriptUrl,
+      transcriptType: it.transcriptType,
+      audioUrl: it.audioUrl || ''
+    }));
+
+  sendJSON(res, 200, { podcast: { title: feed.title }, feedUrl, episodes, withTranscript: episodes.filter(e => e.hasTranscript).length });
+}
+
+// Generate a transcript from episode AUDIO via the user's OpenAI (Whisper-
+// compatible) key, for episodes that don't publish one. Podcast RSS audio only
+// (YouTube/Amazon audio isn't accessible via API).
+async function handlePodcastTranscribe(req, res, user) {
+  const plan = effectivePlan(user);
+  if (plan === 'expired') throw { status: 402, message: 'Your trial has ended. Choose a plan to keep transcribing.' };
+  if (plan === 'free' && featureCount(user, 'transcribe') >= FREE_LIMITS.transcribe) {
+    throw { status: 429, message: `Daily free limit reached for ${FEATURE_LABEL.transcribe} (${FREE_LIMITS.transcribe}/day). Upgrade for more.` };
+  }
+
+  const { audioUrl } = await readBody(req);
+  if (!audioUrl) throw { status: 400, message: 'No episode audio URL provided.' };
+
+  // Use whichever STT-capable key the user has, in preference order, with fallback.
+  const available = providers.STT_ORDER.filter(p => user.keys && user.keys[p]);
+  if (!available.length) {
+    throw { status: 400, message: 'Add an OpenAI, Groq, or Gemini key to generate transcripts from audio.' };
+  }
+
+  // 25 MB cap (OpenAI/Groq Whisper upload limit; Gemini inline limit is similar).
+  let buffer, contentType;
+  try {
+    ({ buffer, contentType } = await safeFetchBuffer(audioUrl, { maxBytes: 25 * 1024 * 1024, timeoutMs: 60000 }));
+  } catch (e) {
+    if (e && e.status === 413) throw { status: 413, message: 'This episode’s audio exceeds the 25 MB transcription limit. Try a shorter episode.' };
+    throw e;
+  }
+
+  let textOut = '', lastErr = null, usedProvider = '';
+  for (const p of available) {
+    const key = sec.decryptKey(user.keys[p]);
+    if (!key) continue;
+    try {
+      const t = await providers.transcribe(p, key, buffer, contentType);
+      if (t && t.length >= 10) { textOut = t; usedProvider = p; break; }
+    } catch (e) {
+      lastErr = e; // try the next provider
+    }
+  }
+  if (!textOut) throw lastErr || { status: 422, message: 'Transcription produced no usable text.' };
+  if (looksNSFW(textOut.slice(0, 4000))) throw { status: 451, message: 'This transcript was flagged as explicit and was blocked.' };
+
+  if (plan === 'free') { bumpFeature(user, 'transcribe'); }
+  pushHistory(user, { feature: 'transcribe', at: new Date().toISOString(), preview: textOut.slice(0, 80) });
+  await store.saveUser(user);
+  sendJSON(res, 200, { text: textOut.slice(0, 200000), provider: usedProvider });
+}
+
+// Fetch one transcript file and return clean plain text.
+async function handlePodcastTranscript(req, res, user, query) {
+  const url = String(query.url || '').trim();
+  if (!url) throw { status: 400, message: 'No transcript URL provided.' };
+  const { text, contentType } = await safeFetchText(url, { maxBytes: 8 * 1024 * 1024, timeoutMs: 20000 });
+  const plain = rss.transcriptToText(text, contentType);
+  if (!plain || plain.length < 20) throw { status: 422, message: 'No readable transcript found at that URL.' };
+  if (looksNSFW(plain.slice(0, 4000))) throw { status: 451, message: 'This transcript was flagged as explicit and was blocked.' };
+  sendJSON(res, 200, { text: plain.slice(0, 200000) });
+}
+
+async function handleDiscover(req, res, user, query) {
+  const term = String(query.term || '').trim().slice(0, 120);
+  const genre = String(query.genre || '').trim().slice(0, 40);
+  const q = [genre, term].filter(Boolean).join(' ').trim();
+  if (!q) throw { status: 400, message: 'Enter a search term.' };
+
+  const url = `https://itunes.apple.com/search?media=podcast&entity=podcast&limit=24&term=${encodeURIComponent(q)}`;
+  let data;
+  try {
+    const r = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(12000) });
+    data = await r.json();
+  } catch (e) {
+    throw { status: 502, message: 'Podcast search is unavailable right now. Try again shortly.' };
+  }
+
+  const results = (Array.isArray(data.results) ? data.results : [])
+    .filter(p => p.collectionExplicitness !== 'explicit' && p.trackExplicitness !== 'explicit')
+    .map(p => ({
+      name: p.collectionName || p.trackName || '',
+      artist: p.artistName || '',
+      genre: p.primaryGenreName || '',
+      artwork: p.artworkUrl600 || p.artworkUrl100 || '',
+      feedUrl: p.feedUrl || '',
+      link: p.collectionViewUrl || p.trackViewUrl || '',
+      episodes: p.trackCount || 0
+    }));
+  sendJSON(res, 200, { results, filtered: (data.resultCount || 0) - results.length });
+}
+
 async function handleDeleteKey(req, res, user, provider) {
   if (user.keys && user.keys[provider]) { delete user.keys[provider]; await store.saveUser(user); }
   sendJSON(res, 200, { ok: true, providers: Object.keys(user.keys || {}) });
@@ -159,14 +400,14 @@ async function handleAI(req, res, user) {
   const plan = effectivePlan(user);
   if (plan === 'expired') throw { status: 402, message: 'Your trial has ended. Choose a plan to keep generating.' };
 
-  if (plan === 'free') {
-    const used = user.usage && user.usage.date === today() ? user.usage.count : 0;
-    if (used >= FREE_DAILY_LIMIT) {
-      throw { status: 429, message: `Daily free limit reached (${FREE_DAILY_LIMIT}/${FREE_DAILY_LIMIT}). Upgrade to continue.` };
-    }
+  const { systemPrompt, userPrompt, provider: wanted, feature: rawFeature } = await readBody(req);
+  const feature = FEATURES.includes(rawFeature) ? rawFeature : 'generate';
+
+  // Per-feature daily cap on the free plan (trial/paid are unlimited).
+  if (plan === 'free' && featureCount(user, feature) >= FREE_LIMITS[feature]) {
+    throw { status: 429, message: `Daily free limit reached for ${FEATURE_LABEL[feature]} (${FREE_LIMITS[feature]}/day). Upgrade for unlimited.` };
   }
 
-  const { systemPrompt, userPrompt, provider: wanted } = await readBody(req);
   if (typeof userPrompt !== 'string' || !userPrompt.trim()) throw { status: 400, message: 'userPrompt is required.' };
   if (userPrompt.length > 60000) throw { status: 400, message: 'Prompt is too long.' };
 
@@ -179,14 +420,11 @@ async function handleAI(req, res, user) {
   // The actual provider fetch happens server-side (no CORS limits)
   const text = await providers.callAI(provider, key, String(systemPrompt || ''), String(userPrompt));
 
-  // Count usage only on success, only for the free plan
-  if (plan === 'free') {
-    const t = today();
-    user.usage = user.usage && user.usage.date === t ? user.usage : { date: t, count: 0 };
-    user.usage.count++;
-    await store.saveUser(user);
-  }
-  sendJSON(res, 200, { text, provider, usageToday: user.usage ? user.usage.count : 0 });
+  // Count usage on success (free plan) and record a history entry (all plans).
+  if (plan === 'free') bumpFeature(user, feature);
+  pushHistory(user, { feature, at: new Date().toISOString(), preview: String(userPrompt).replace(/\s+/g, ' ').slice(0, 80) });
+  await store.saveUser(user);
+  sendJSON(res, 200, { text, provider, feature, usage: featureUsageToday(user) });
 }
 
 async function handleCheckout(req, res, user) {
@@ -216,6 +454,7 @@ async function handleCheckout(req, res, user) {
   }
 
   user.plan = plan;
+  pushTransaction(user, { plan, at: new Date().toISOString(), mock: !billingConfigured });
   await store.saveUser(user);
   sendJSON(res, 200, { ok: true, user: publicUser(user), mock: !billingConfigured });
 }
@@ -246,6 +485,82 @@ function serveStatic(req, res) {
   });
 }
 
+/* ---- OAuth (Google / GitHub) ----
+   The OAuth origin is taken ONLY from the trusted APP_URL env var, never from
+   request headers (Host / X-Forwarded-*). Deriving it from headers would let an
+   attacker spoof Host and redirect the freshly minted session token to their
+   own origin. OAuth is therefore unavailable unless APP_URL is set. */
+function oauthOrigin() {
+  return process.env.APP_URL ? process.env.APP_URL.replace(/\/$/, '') : null;
+}
+function oauthReady(provider) {
+  return oauth.isConfigured(provider) && !!oauthOrigin();
+}
+
+function handleOAuthStart(req, res, provider) {
+  if (!oauthReady(provider)) {
+    return sendJSON(res, 400, { error: `${provider} login is not enabled on this server (set ${provider.toUpperCase()}_CLIENT_ID/SECRET and APP_URL).` });
+  }
+  const redirectUri = `${oauthOrigin()}/api/auth/${provider}/callback`;
+  const state = sec.signData({ p: provider }, 600); // signed + 10-min expiry (CSRF)
+  res.writeHead(302, { Location: oauth.authorizeUrl(provider, redirectUri, state), 'Cache-Control': 'no-store' });
+  res.end();
+}
+
+// On any failure, bounce back to the app with an error flag in the fragment
+// (fragments are never sent to servers, so nothing leaks in logs/Referer).
+function oauthFail(res, msg) {
+  res.writeHead(302, {
+    Location: `${oauthOrigin() || ''}/#auth_error=${encodeURIComponent(msg)}`,
+    'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer'
+  });
+  res.end();
+}
+
+async function findOrCreateOAuthUser(provider, email, providerId) {
+  let user = await store.getUserByEmail(email);
+  if (!user) {
+    user = await store.createUser({
+      id: sec.newId(),
+      email: store.normEmail(email),
+      oauth: { [provider]: providerId },
+      plan: null,
+      createdAt: new Date().toISOString(),
+      usage: { date: today(), count: 0 },
+      keys: {}
+    });
+  } else if (!user.oauth || user.oauth[provider] !== providerId) {
+    // link this provider to the existing account (same verified email)
+    user.oauth = Object.assign({}, user.oauth, { [provider]: providerId });
+    await store.saveUser(user);
+  }
+  return user;
+}
+
+async function handleOAuthCallback(req, res, provider, query) {
+  if (!oauthReady(provider)) return oauthFail(res, 'Login not configured.');
+  if (query.error) return oauthFail(res, query.error_description || query.error);
+  const st = sec.verifyData(query.state);
+  if (!st || st.p !== provider || !query.code) return oauthFail(res, 'Login session expired, please try again.');
+
+  try {
+    const redirectUri = `${oauthOrigin()}/api/auth/${provider}/callback`;
+    const accessToken = await oauth.exchangeCode(provider, query.code, redirectUri);
+    const { email, providerId } = await oauth.fetchProfile(provider, accessToken);
+    const user = await findOrCreateOAuthUser(provider, email, providerId);
+    const token = sec.signToken(user.id);
+    // Hand the session token back via the URL fragment (never sent to servers/
+    // Referer); the SPA reads it from the hash, stores it, and scrubs the URL.
+    res.writeHead(302, {
+      Location: `${oauthOrigin()}/#auth=${token}`,
+      'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer'
+    });
+    res.end();
+  } catch (e) {
+    oauthFail(res, e.message || 'Login failed.');
+  }
+}
+
 /* ---- router ---- */
 const server = http.createServer(async (req, res) => {
   const url = (req.url || '').split('?')[0];
@@ -253,12 +568,24 @@ const server = http.createServer(async (req, res) => {
 
   if (!url.startsWith('/api/')) return serveStatic(req, res);
 
+  const query = Object.fromEntries(new URLSearchParams((req.url.split('?')[1] || '')));
+
   try {
     if (url === '/api/health' && method === 'GET') {
-      return sendJSON(res, 200, { ok: true, providers: Object.keys(providers.PROVIDER_MODELS) });
+      return sendJSON(res, 200, {
+        ok: true,
+        providers: Object.keys(providers.PROVIDER_MODELS),
+        oauth: { google: oauthReady('google'), github: oauthReady('github') }
+      });
     }
     if (url === '/api/auth/signup' && method === 'POST') return await handleSignup(req, res);
     if (url === '/api/auth/login' && method === 'POST') return await handleLogin(req, res);
+
+    // ----- OAuth (unauthenticated) -----
+    let m = url.match(/^\/api\/auth\/(google|github)$/);
+    if (m && method === 'GET') return handleOAuthStart(req, res, m[1]);
+    m = url.match(/^\/api\/auth\/(google|github)\/callback$/);
+    if (m && method === 'GET') return await handleOAuthCallback(req, res, m[1], query);
 
     // ----- everything below requires auth -----
     const user = await authUser(req);
@@ -267,11 +594,16 @@ const server = http.createServer(async (req, res) => {
     if (url === '/api/keys/' && method === 'DELETE') throw { status: 400, message: 'Provider required.' };
 
     if (url === '/api/auth/me' && method === 'GET') return handleMe(req, res, user);
+    if (url === '/api/account' && method === 'GET') return handleAccount(req, res, user);
     if (url === '/api/keys' && method === 'GET') return handleListKeys(req, res, user);
     if (url === '/api/keys' && method === 'POST') return await handleSaveKey(req, res, user);
     if (url.startsWith('/api/keys/') && method === 'DELETE') {
       return await handleDeleteKey(req, res, user, decodeURIComponent(url.slice('/api/keys/'.length)));
     }
+    if (url === '/api/discover' && method === 'GET') return await handleDiscover(req, res, user, query);
+    if (url === '/api/podcast/episodes' && method === 'GET') return await handlePodcastEpisodes(req, res, user, query);
+    if (url === '/api/podcast/transcript' && method === 'GET') return await handlePodcastTranscript(req, res, user, query);
+    if (url === '/api/podcast/transcribe' && method === 'POST') return await handlePodcastTranscribe(req, res, user);
     if (url === '/api/ai' && method === 'POST') return await handleAI(req, res, user);
     if (url === '/api/billing/checkout' && method === 'POST') return await handleCheckout(req, res, user);
 

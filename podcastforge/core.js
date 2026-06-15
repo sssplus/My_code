@@ -21,7 +21,26 @@
   'use strict';
 
   const TOKEN_KEY = 'pf_token';
-  const state = { backend: false, token: localStorage.getItem(TOKEN_KEY) || null, user: null };
+  const state = { backend: false, token: localStorage.getItem(TOKEN_KEY) || null, user: null, oauth: { google: false, github: false } };
+
+  // Capture an OAuth result handed back in the URL (?auth=token or ?auth_error=msg),
+  // store the session, then scrub it from the address bar.
+  let pendingAuthError = null;
+  let justAuthed = false;
+  (function captureOAuthReturn() {
+    try {
+      const u = new URL(window.location.href);
+      // Token/error arrive in the URL fragment (never sent to servers/Referer).
+      const hash = u.hash && u.hash.length > 1 ? new URLSearchParams(u.hash.slice(1)) : new URLSearchParams('');
+      const tok = hash.get('auth');
+      const err = hash.get('auth_error');
+      if (tok || err) {
+        if (tok) { state.token = tok; localStorage.setItem(TOKEN_KEY, tok); justAuthed = true; }
+        if (err) pendingAuthError = err;
+        history.replaceState({}, '', u.pathname + (u.search ? u.search : ''));
+      }
+    } catch (e) { /* non-browser / malformed */ }
+  })();
 
   async function api(pathname, { method = 'GET', body, auth = true } = {}) {
     const headers = { 'Content-Type': 'application/json' };
@@ -37,6 +56,10 @@
     session: null,
     hasBackend: () => state.backend,
     isAuthed: () => !!(state.backend && state.token && state.user),
+    oauthEnabled: (p) => !!state.oauth[p],
+    authError: () => pendingAuthError,
+    justAuthenticated: () => justAuthed,
+    startOAuth: (provider) => { window.location.href = `/api/auth/${String(provider).toLowerCase()}`; },
 
     async signup(email, password) {
       const d = await api('/api/auth/signup', { method: 'POST', auth: false, body: { email, password } });
@@ -77,9 +100,31 @@
       if (d.user) { state.user = d.user; PF.session = { token: state.token, user: d.user }; }
       return d.user;
     },
-    async callAI(systemPrompt, userPrompt, provider) {
-      const d = await api('/api/ai', { method: 'POST', body: { systemPrompt, userPrompt, provider } });
-      if (state.user && typeof d.usageToday === 'number') state.user.usageToday = d.usageToday;
+    async account() { return await api('/api/account'); },
+    async removeKey(provider) {
+      const d = await api('/api/keys/' + encodeURIComponent(provider), { method: 'DELETE' });
+      if (state.user) state.user.providers = d.providers;
+      return d.providers;
+    },
+    async discover(term, genre) {
+      const qs = new URLSearchParams({ term: term || '', genre: genre || '' }).toString();
+      const d = await api(`/api/discover?${qs}`);
+      return { results: d.results || [], filtered: d.filtered || 0 };
+    },
+    async podcastEpisodes(feedUrl) {
+      return await api(`/api/podcast/episodes?${new URLSearchParams({ feedUrl }).toString()}`);
+    },
+    async podcastTranscript(url) {
+      const d = await api(`/api/podcast/transcript?${new URLSearchParams({ url }).toString()}`);
+      return d.text;
+    },
+    async transcribeAudio(audioUrl) {
+      const d = await api('/api/podcast/transcribe', { method: 'POST', body: { audioUrl } });
+      return d.text;
+    },
+    async callAI(systemPrompt, userPrompt, provider, feature) {
+      const d = await api('/api/ai', { method: 'POST', body: { systemPrompt, userPrompt, provider, feature } });
+      if (state.user && d.usage) state.user.usage = d.usage;
       return d.text;
     }
   };
@@ -95,6 +140,10 @@
     try {
       const res = await fetch('/api/health', { method: 'GET' });
       state.backend = res.ok;
+      if (res.ok) {
+        const h = await res.json().catch(() => ({}));
+        if (h.oauth) state.oauth = h.oauth;
+      }
     } catch (e) {
       state.backend = false;
     }

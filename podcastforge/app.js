@@ -187,6 +187,8 @@ function showPaywall() {
 }
 
 function checkFreeUsage() {
+  // When signed into the backend, the server is authoritative on per-feature caps.
+  if (window.PF && PF.isAuthed()) return true;
   if (appState.plan !== 'free') return true;
 
   const today = new Date().toISOString().split('T')[0];
@@ -252,18 +254,21 @@ function updateNavState() {
 
 function updateLocks() {
   const isLanding = sessionStorage.getItem('pf_view_state') === 'landing';
-  const isFree = appState.plan === 'free' || appState.plan === 'expired' || isLanding;
+  // Transcript AI tools are Pro-only (free has none). Miner + Tracker are
+  // available on free with daily caps, so they're locked only when there's no
+  // active session at all (expired trial, or viewing the landing page).
+  const noAccess = appState.plan === 'expired' || isLanding;
+  const transcriptLocked = noAccess || appState.plan === 'free';
 
+  els.toolsLock.style.display = transcriptLocked ? 'flex' : 'none';
+  const trackerLock = document.getElementById('tracker-lock');
   const minerLock = document.getElementById('miner-lock');
-  if (isFree) {
-    els.toolsLock.style.display = 'flex';
-    document.getElementById('tracker-lock').style.display = 'flex';
-    if (minerLock) minerLock.style.display = 'flex';
-  } else {
-    els.toolsLock.style.display = 'none';
-    document.getElementById('tracker-lock').style.display = 'none';
-    if (minerLock) minerLock.style.display = 'none';
-  }
+  const agentLock = document.getElementById('agent-lock');
+  const musicLock = document.getElementById('music-lock');
+  if (trackerLock) trackerLock.style.display = noAccess ? 'flex' : 'none';
+  if (minerLock) minerLock.style.display = noAccess ? 'flex' : 'none';
+  if (agentLock) agentLock.style.display = noAccess ? 'flex' : 'none';
+  if (musicLock) musicLock.style.display = noAccess ? 'flex' : 'none';
 
   // Pro Upgrade button visibility in nav
   const isWorkspace = sessionStorage.getItem('pf_view_state') === 'workspace';
@@ -322,6 +327,10 @@ function detectProvider() {
     els.badge.textContent = '🟢 NVIDIA NIM';
     els.badge.style.setProperty('--badge-color', '#76b900');
     appState.provider = 'nvidia';
+  } else if (key.startsWith('gsk_')) {
+    els.badge.textContent = '🟠 Groq';
+    els.badge.style.setProperty('--badge-color', '#f55036');
+    appState.provider = 'groq';
   } else {
     els.badge.textContent = '⚪ OpenAI Compatible';
     els.badge.style.setProperty('--badge-color', '#10b981');
@@ -373,13 +382,41 @@ function syncBackendUser() {
       date: new Date().toISOString().split('T')[0], count: u.usageToday || 0
     }));
   }
-  if ((u.providers || []).length && appState.provider === 'none') {
-    appState.provider = u.providers[0];
-    els.badge.className = 'provider-badge active';
-    els.badge.textContent = `🔒 Key stored (${u.providers[0]})`;
-    els.badge.style.setProperty('--badge-color', '#10b981');
-    els.apiKey.placeholder = 'Key stored securely on your account — paste a new one to replace it';
+  // Reflect the account's stored keys in the provider badge — but never clobber
+  // a key the user has just typed into the bar. Handles add / switch / remove.
+  const provs = u.providers || [];
+  if (!(appState.apiKey || '').trim()) {
+    if (provs.length) {
+      if (!provs.includes(appState.provider)) appState.provider = provs[0];
+      els.badge.className = 'provider-badge active';
+      els.badge.textContent = `🔒 Key stored (${appState.provider})`;
+      els.badge.style.setProperty('--badge-color', '#10b981');
+      els.apiKey.placeholder = 'Key stored securely on your account — paste a new one to replace it';
+    } else {
+      appState.provider = 'none';
+      els.badge.className = 'provider-badge none';
+      els.badge.textContent = 'No key detected';
+      els.apiKey.placeholder = 'Paste your Anthropic, Gemini, OpenRouter, OpenAI, Groq, or NVIDIA API key here...';
+    }
   }
+
+  // Pull the signed-in identity into the nav (user ID surfaced in the title).
+  const chip = document.getElementById('nav-account');
+  if (chip) {
+    chip.style.display = 'inline-flex';
+    chip.textContent = u.email;
+    chip.title = `User ID: ${u.id}`;
+  }
+  // Engine directive: show that the engine runs server-side under this account.
+  const note = document.getElementById('api-key-note');
+  if (note) {
+    const provs = u.providers || [];
+    note.innerHTML = `⚙️ <strong>Engine ready</strong> — signed in as ${escapeHTML(u.email)}. `
+      + (provs.length
+        ? `Requests run on our server under your account using your stored ${provs.map(escapeHTML).join(', ')} key${provs.length > 1 ? 's' : ''}.`
+        : `Add an API key above and it’s stored on your account, not in this browser.`);
+  }
+
   updateNavState();
   updateLocks();
 }
@@ -539,12 +576,13 @@ function friendlyNetworkError(provider) {
   return `Could not reach ${label}. Check your internet connection, an ad-blocker/extension may be blocking the request, or the provider may not allow browser (CORS) calls from this origin.`;
 }
 
-async function callAI(systemPrompt, userPrompt) {
+async function callAI(systemPrompt, userPrompt, feature) {
   // Backend path: the server holds the key and performs the provider fetch
   // (server-to-server, so every provider works — including NVIDIA/OpenAI).
+  // `feature` (generate|studio|miner|tracker) drives the free-plan daily caps.
   if (window.PF && PF.isAuthed()) {
     const prov = appState.provider !== 'none' ? appState.provider : undefined;
-    return PF.callAI(systemPrompt, userPrompt, prov);
+    return PF.callAI(systemPrompt, userPrompt, prov, feature || 'generate');
   }
 
   const key = appState.apiKey.trim();
@@ -645,7 +683,15 @@ window.app = {
   initRazorpayCheckout,
   showAuthModal,
   hideAuthModal,
+  openAccount,
+  closeAccount,
+  onPricingNav,
+  acSetCurrency,
+  removeProviderKey,
   simulateSSO,
+  loginWithProvider,
+  setAuthMode,
+  submitAuth,
   handleAuthSubmit,
   startFreeTrialAuth,
   transitionToWorkspace,
@@ -706,7 +752,7 @@ Transcript:
 ${txt.substring(0, 15000)}`;
 
   try {
-    const result = await callAI(sysPrompt, userPrompt);
+    const result = await callAI(sysPrompt, userPrompt, 'generate');
     generatedData = safeParseJSON(result);
 
     incrementFreeUsage();
@@ -753,29 +799,49 @@ function renderOutputs() {
   }
 }
 
-/* ── Chat Assistant ────────────────────────────── */
-function addChatMessage(role, text) {
-  const div = document.createElement('div');
-  div.style.background = role === 'user' ? 'rgba(124,58,237,0.1)' : 'rgba(255,255,255,0.05)';
-  div.style.padding = '10px 12px';
-  div.style.borderRadius = '8px';
-  div.style.border = role === 'user' ? '1px solid rgba(124,58,237,0.3)' : '1px solid rgba(255,255,255,0.1)';
-  div.style.alignSelf = role === 'user' ? 'flex-end' : 'flex-start';
-  div.style.maxWidth = '90%';
-  const strong = document.createElement('strong');
-  strong.textContent = role === 'user' ? 'You' : 'AI';
-  div.appendChild(strong);
-  div.appendChild(document.createElement('br'));
-  div.appendChild(document.createTextNode(text));
-  els.chatHistory.appendChild(div);
+/* ── Chat Assistant (conversational, can answer + apply edits) ── */
+let chatLog = []; // [{ role:'user'|'assistant', text }]
+
+function addChatMessage(role, text, opts) {
+  const wrap = document.createElement('div');
+  wrap.className = `pf-chat-msg ${role === 'user' ? 'pf-chat-user' : 'pf-chat-ai'}`;
+  const who = document.createElement('div');
+  who.className = 'pf-chat-who';
+  who.textContent = role === 'user' ? 'You' : 'Assistant';
+  const body = document.createElement('div');
+  body.className = 'pf-chat-body';
+  body.textContent = text;
+  wrap.appendChild(who);
+  wrap.appendChild(body);
+  if (opts && opts.applied) {
+    const tag = document.createElement('div');
+    tag.className = 'pf-chat-applied';
+    tag.textContent = `✓ Applied to ${opts.applied}`;
+    wrap.appendChild(tag);
+  }
+  els.chatHistory.appendChild(wrap);
   els.chatHistory.scrollTop = els.chatHistory.scrollHeight;
+}
+
+function showChatTyping(on) {
+  let el = document.getElementById('pf-chat-typing');
+  if (on) {
+    if (el) return;
+    el = document.createElement('div');
+    el.id = 'pf-chat-typing';
+    el.className = 'pf-chat-msg pf-chat-ai';
+    el.innerHTML = '<div class="pf-chat-who">Assistant</div><div class="pf-chat-dots"><span></span><span></span><span></span></div>';
+    els.chatHistory.appendChild(el);
+    els.chatHistory.scrollTop = els.chatHistory.scrollHeight;
+  } else if (el) {
+    el.remove();
+  }
 }
 
 async function sendChatMessage() {
   const msg = els.chatInput.value.trim();
   if (!msg) return;
 
-  // Find active tab
   const activeTab = document.querySelector('.tab-btn.active');
   const format = activeTab ? activeTab.dataset.target.replace('tab-', '') : null;
 
@@ -785,24 +851,51 @@ async function sendChatMessage() {
   }
 
   addChatMessage('user', msg);
+  chatLog.push({ role: 'user', text: msg });
   els.chatInput.value = '';
   els.chatSend.disabled = true;
   els.chatSend.textContent = '...';
+  showChatTyping(true);
 
-  const sysPrompt = "You are an assistant helping the user refine a piece of content. Return ONLY the updated content text. For Twitter threads, return a JSON array of strings instead. No preamble.";
-  const userPrompt = `Current Content:\n${JSON.stringify(generatedData[format])}\n\nUser Request: ${msg}\n\nReturn the updated content.`;
+  // The assistant both replies conversationally AND, when asked to change the
+  // piece, returns the full updated content. JSON keeps the two cleanly separated.
+  const sysPrompt =
+    `You are a helpful content assistant in a podcast-repurposing app. The user is viewing their "${format}" piece. ` +
+    `Answer questions conversationally and concisely. If (and only if) the user asks you to rewrite, tweak, expand, shorten, ` +
+    `or otherwise change the piece, return the FULL updated content too. ` +
+    `Return ONLY JSON, no fences: {"reply":"your short chat reply","updated":<new content, or null if no change>}. ` +
+    `For the twitter format, "updated" must be a JSON array of tweet strings.`;
+  const history = chatLog.slice(-6).map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.text}`).join('\n');
+  const userPrompt =
+    `Current "${format}" content:\n${JSON.stringify(generatedData[format])}\n\n` +
+    `Conversation so far:\n${history}\n\nRespond to the latest user message.`;
 
   try {
-    const result = await callAI(sysPrompt, userPrompt);
-    let clean = result;
-    if (format === 'twitter') {
-      try { clean = safeParseJSON(result); } catch (e) { /* keep raw text */ }
+    const result = await callAI(sysPrompt, userPrompt, 'chat');
+    let reply = '', updated = null;
+    try {
+      const parsed = safeParseJSON(result);
+      reply = typeof parsed.reply === 'string' ? parsed.reply : '';
+      updated = (parsed.updated === undefined ? null : parsed.updated);
+    } catch (e) {
+      reply = result; // model didn't return JSON — treat the whole thing as a reply
     }
 
-    generatedData[format] = clean;
-    renderOutputs();
-    addChatMessage('assistant', "Updated the content for you!");
+    let applied = null;
+    const hasUpdate = updated !== null && updated !== '' &&
+      !(Array.isArray(updated) && updated.length === 0);
+    if (hasUpdate) {
+      generatedData[format] = updated;
+      renderOutputs();
+      applied = format;
+    }
+
+    showChatTyping(false);
+    const finalReply = reply || (applied ? 'Updated the content for you!' : 'Done.');
+    addChatMessage('assistant', finalReply, { applied });
+    chatLog.push({ role: 'assistant', text: finalReply });
   } catch (err) {
+    showChatTyping(false);
     addChatMessage('assistant', "Sorry, there was an error: " + err.message);
   } finally {
     els.chatSend.disabled = false;
@@ -836,7 +929,7 @@ async function runTranscriptTool(type) {
   btn.disabled = true;
 
   try {
-    const res = await callAI(prompt, txt);
+    const res = await callAI(prompt, txt, 'generate');
     els.transcript.value = res;
     showToast("Transcript updated!", "success");
   } catch (e) {
@@ -953,9 +1046,47 @@ document.querySelectorAll('.option-chip').forEach(chip => {
 document.getElementById('btn-nav-upgrade').addEventListener('click', showPaywall);
 
 // Auth Gateway & Transitions implementation
+let authMode = 'signup'; // 'signup' | 'signin'
+
+function setAuthMode(mode) {
+  authMode = mode === 'signin' ? 'signin' : 'signup';
+  const signup = authMode === 'signup';
+  const t = (id) => document.getElementById(id);
+  t('auth-tab-signup')?.classList.toggle('active', signup);
+  t('auth-tab-signin')?.classList.toggle('active', !signup);
+  if (t('auth-title')) t('auth-title').textContent = signup ? 'Create your account' : 'Welcome back';
+  if (t('auth-subtitle')) t('auth-subtitle').textContent = signup
+    ? 'Create an account to start your free 15-day trial — full access, no card required.'
+    : 'Sign in to get back to your workspace.';
+  if (t('auth-submit')) t('auth-submit').textContent = signup ? 'Create account & start trial' : 'Sign in';
+  if (t('auth-hint')) t('auth-hint').style.display = signup ? 'block' : 'none';
+  if (t('auth-password')) t('auth-password').setAttribute('autocomplete', signup ? 'new-password' : 'current-password');
+  if (t('auth-switch')) {
+    t('auth-switch').innerHTML = signup
+      ? 'Already have an account? <a href="#" onclick="app.setAuthMode(\'signin\'); return false;">Sign in</a>'
+      : 'New here? <a href="#" onclick="app.setAuthMode(\'signup\'); return false;">Create an account</a>';
+  }
+}
+
+// Reflect which social logins the server actually has configured.
+function updateSSOState() {
+  const backend = window.PF && PF.hasBackend();
+  const gOn = !backend || (PF.oauthEnabled && PF.oauthEnabled('google'));
+  const ghOn = !backend || (PF.oauthEnabled && PF.oauthEnabled('github'));
+  const g = document.getElementById('btn-sso-google');
+  const gh = document.getElementById('btn-sso-github');
+  if (g) { g.disabled = !gOn; g.classList.toggle('disabled', !gOn); }
+  if (gh) { gh.disabled = !ghOn; gh.classList.toggle('disabled', !ghOn); }
+  const hint = document.getElementById('sso-hint');
+  if (hint) hint.style.display = (backend && (!gOn || !ghOn)) ? 'block' : 'none';
+}
+
 function showAuthModal() {
+  setAuthMode('signup');
+  updateSSOState();
   const modal = document.getElementById('auth-modal');
   if (modal) modal.classList.add('show');
+  setTimeout(() => document.getElementById('auth-email')?.focus(), 50);
 }
 
 function hideAuthModal() {
@@ -963,68 +1094,177 @@ function hideAuthModal() {
   if (modal) modal.classList.remove('show');
 }
 
-function simulateSSO(provider) {
-  showToast(`Connected successfully with ${provider}!`, 'success');
-  setTimeout(() => {
-    handleAuthSubmit();
-  }, 500);
+/* ── Account panel ───────────────────────────────── */
+let lastAccountData = null;
+const ACCOUNT_FEATURES = {
+  generate: 'Generations', studio: 'Script Studio', miner: 'Miner sections',
+  tracker: 'AI Stack audits', agent: 'Agent runs', music: 'Music briefs', chat: 'Chat messages', transcribe: 'Audio transcripts'
+};
+
+function timeAgo(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  const s = (Date.now() - d.getTime()) / 1000;
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
 }
 
-async function handleAuthSubmit() {
+async function openAccount() {
+  if (!(window.PF && PF.isAuthed())) { showAuthModal(); return; }
+  const modal = document.getElementById('account-modal');
+  const body = document.getElementById('account-body');
+  if (!modal || !body) return;
+  body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-muted);">Loading…</div>';
+  modal.classList.add('show');
+  try {
+    lastAccountData = await PF.account();
+    body.innerHTML = renderAccount(lastAccountData);
+  } catch (e) {
+    body.innerHTML = `<div class="ac-muted" style="padding:20px;">${escapeHTML(e.message)}</div>`;
+  }
+}
+function closeAccount() { document.getElementById('account-modal')?.classList.remove('show'); }
+
+// In the workspace the marketing Pricing section is hidden, so the nav "Pricing"
+// link opens the paywall modal instead of scrolling to a hidden anchor.
+function onPricingNav(e) {
+  if (document.body.classList.contains('workspace-active')) {
+    if (e) e.preventDefault();
+    showPaywall();
+    return false;
+  }
+  return true;
+}
+
+function renderAccount(d) {
+  const u = d.user, e = escapeHTML;
+  let h = '';
+  h += `<div class="ac-sec"><div class="ac-h">Profile</div>
+    <div class="ac-row"><span>Email</span><b>${e(u.email)}</b></div>
+    <div class="ac-row"><span>Plan</span><b>${e(String(u.plan || '').toUpperCase())}</b></div>
+    ${u.plan === 'trial' ? `<div class="ac-row"><span>Trial</span><b>${u.daysLeft} days left</b></div>` : ''}
+    <div class="ac-row"><span>User ID</span><span class="ac-mono">${e(u.id)}</span></div></div>`;
+
+  h += `<div class="ac-sec"><div class="ac-h">Today's usage</div>`;
+  Object.keys(ACCOUNT_FEATURES).forEach(f => {
+    const used = (u.usage && u.usage[f]) || 0;
+    const lim = u.freeLimits && u.freeLimits[f];
+    const unlimited = u.plan !== 'free';
+    const pct = unlimited || !lim ? 0 : Math.min(100, used / lim * 100);
+    h += `<div class="ac-use"><div class="ac-use-top"><span>${ACCOUNT_FEATURES[f]}</span><span>${unlimited ? used + ' · unlimited' : used + ' / ' + lim}</span></div>
+      ${unlimited ? '' : `<div class="ac-bar"><div class="ac-bar-fill" style="width:${pct}%"></div></div>`}</div>`;
+  });
+  h += `</div>`;
+
+  h += `<div class="ac-sec"><div class="ac-h">Connected API keys</div>`;
+  if ((u.providers || []).length) {
+    u.providers.forEach(p => { h += `<div class="ac-row"><span>🔑 ${e(p)}</span><button class="ac-rm" onclick="app.removeProviderKey('${e(p)}')">Remove</button></div>`; });
+  } else h += `<div class="ac-muted">No keys stored. Add one in the workspace key bar.</div>`;
+  h += `</div>`;
+
+  h += `<div class="ac-sec"><div class="ac-h">Settings</div>
+    <div class="ac-row"><span>Currency</span><span>
+      <button class="ac-cur ${appState.currency === 'USD' ? 'on' : ''}" onclick="app.acSetCurrency('USD')">$ USD</button>
+      <button class="ac-cur ${appState.currency === 'INR' ? 'on' : ''}" onclick="app.acSetCurrency('INR')">₹ INR</button></span></div>
+    <div class="ac-row"><span>Session</span><button class="ac-signout" onclick="app.closeAccount(); app.signOut()">Sign out</button></div></div>`;
+
+  h += `<div class="ac-sec"><div class="ac-h">Recent activity</div>`;
+  if ((d.history || []).length) {
+    d.history.forEach(r => { h += `<div class="ac-hist"><span class="ac-hist-f">${e(r.feature)}</span><span class="ac-hist-p">${e(r.preview || '')}</span><span class="ac-hist-t">${e(timeAgo(r.at))}</span></div>`; });
+  } else h += `<div class="ac-muted">No activity yet — generate something to see it here.</div>`;
+  h += `</div>`;
+
+  h += `<div class="ac-sec"><div class="ac-h">Plan changes</div>`;
+  if ((d.transactions || []).length) {
+    d.transactions.forEach(tx => { h += `<div class="ac-row"><span>${e(String(tx.plan || '').toUpperCase())} ${tx.mock ? '<span class="ac-mock">mock</span>' : ''}</span><span class="ac-muted">${e(timeAgo(tx.at))}</span></div>`; });
+  } else h += `<div class="ac-muted">No plan changes yet.</div>`;
+  h += `</div>`;
+  return h;
+}
+
+function acSetCurrency(cur) {
+  setCurrency(cur);
+  if (lastAccountData) document.getElementById('account-body').innerHTML = renderAccount(lastAccountData);
+}
+
+async function removeProviderKey(p) {
+  try {
+    await PF.removeKey(p);
+    await PF.refreshMe();
+    syncBackendUser();
+    showToast('Key removed.', 'success');
+    openAccount();
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+// Real OAuth when a backend has it configured; simulated SSO for the static demo.
+function loginWithProvider(provider) {
+  const p = String(provider).toLowerCase();
+  if (window.PF && PF.hasBackend()) {
+    if (PF.oauthEnabled(p)) { PF.startOAuth(p); return; }
+    showToast(`${provider} login isn't set up on this server yet. Use email below.`, 'warn');
+    return;
+  }
+  simulateSSO(provider);
+}
+
+function simulateSSO(provider) {
+  showToast(`Connected with ${provider} (demo).`, 'success');
+  setTimeout(transitionToWorkspace, 400);
+}
+
+// Single entry point for the email form; branches on the selected mode.
+async function submitAuth() {
   const email = document.getElementById('auth-email').value.trim();
   const password = document.getElementById('auth-password').value;
-  if (!email) {
-    showToast("Please enter username or email", "warn");
+
+  if (!(window.PF && PF.hasBackend())) {
+    // Static demo with no backend: just enter the workspace.
+    if (!email) { showToast('Please enter an email.', 'warn'); return; }
+    transitionToWorkspace();
     return;
   }
 
-  // Real auth when a backend is present; demo transition otherwise.
-  if (window.PF && PF.hasBackend()) {
-    if (!password) { showToast("Please enter your password", "warn"); return; }
-    try {
-      await PF.login(email, password);
-      syncBackendUser();
-      showToast("Signed in!", "success");
-      transitionToWorkspace();
-    } catch (e) {
-      showToast(e.message, "error");
-    }
-    return;
-  }
-  transitionToWorkspace();
-}
+  if (!email) { showToast('Please enter your email.', 'warn'); return; }
+  const btn = document.getElementById('auth-submit');
+  const restore = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
 
-async function startFreeTrialAuth() {
-  // Real account creation when a backend is present.
-  if (window.PF && PF.hasBackend()) {
-    const email = document.getElementById('auth-email').value.trim();
-    const password = document.getElementById('auth-password').value;
-    if (!email || password.length < 8) {
-      showToast("Enter an email and an 8+ character password to start your trial.", "warn");
-      return;
-    }
-    try {
+  try {
+    if (authMode === 'signup') {
+      if (password.length < 8) { showToast('Password must be at least 8 characters.', 'warn'); return; }
       await PF.signup(email, password);
       syncBackendUser();
-      showToast("Trial started — account created!", "success");
+      showToast('Account created — your 15-day trial has started!', 'success');
       transitionToWorkspace();
-    } catch (e) {
-      showToast(e.message, "error");
+    } else {
+      if (!password) { showToast('Please enter your password.', 'warn'); return; }
+      await PF.login(email, password);
+      syncBackendUser();
+      showToast('Signed in!', 'success');
+      transitionToWorkspace();
     }
-    return;
+  } catch (e) {
+    // Guide the user between modes when the failure suggests the other one.
+    if (authMode === 'signin' && /invalid email or password/i.test(e.message)) {
+      showToast("Invalid email or password. New here? Switch to “Create account”.", 'error');
+    } else if (authMode === 'signup' && /already exists/i.test(e.message)) {
+      showToast('That email already has an account — switching you to Sign in.', 'warn');
+      setAuthMode('signin');
+    } else {
+      showToast(e.message, 'error');
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = restore; }
   }
-
-  let trialStart = localStorage.getItem(STORAGE_KEYS.TRIAL_START);
-  if (!trialStart) {
-    trialStart = new Date().toISOString();
-    localStorage.setItem(STORAGE_KEYS.TRIAL_START, trialStart);
-  }
-  localStorage.setItem(STORAGE_KEYS.PLAN, 'trial');
-  appState.plan = 'trial';
-
-  showToast("Trial started. Connect API key in dashboard anytime.", "success");
-  transitionToWorkspace();
 }
+
+// Back-compat aliases (older callers / window.app exports). Function
+// declarations so they're hoisted for the early window.app export object.
+function handleAuthSubmit() { return submitAuth(); }
+function startFreeTrialAuth() { setAuthMode('signup'); return submitAuth(); }
 
 function transitionToWorkspace() {
   hideAuthModal();
@@ -1046,7 +1286,11 @@ function transitionToWorkspace() {
     updateLocks();
     sessionStorage.setItem('pf_view_state', 'workspace');
 
-    // Scroll to the top of the workspace view
+    // Show a workspace page (honour a deep-linked route, else the default).
+    if (window.pfRouter) {
+      const r = (location.hash.match(/^#\/([a-z]+)/i) || [])[1] || '';
+      pfRouter.go(r);
+    }
     window.scrollTo({ top: 0, behavior: 'auto' });
     window.dispatchEvent(new Event('resize'));
   }, 800);
@@ -1054,10 +1298,14 @@ function transitionToWorkspace() {
 
 function signOut() {
   if (window.PF && PF.isAuthed()) PF.logout();
+  // Drop any workspace route so we return cleanly to the landing page.
+  if (location.hash.startsWith('#/')) history.replaceState(null, '', location.pathname + location.search);
   localStorage.removeItem(STORAGE_KEYS.API_KEY);
   appState.apiKey = '';
   els.apiKey.value = '';
-  els.apiKey.placeholder = 'Paste your Anthropic, Gemini, OpenRouter, or OpenAI API key here...';
+  els.apiKey.placeholder = 'Paste your Anthropic, Gemini, OpenRouter, OpenAI, Groq, or NVIDIA API key here...';
+  const chip = document.getElementById('nav-account');
+  if (chip) chip.style.display = 'none';
   detectProvider();
 
   // Re-display landing view before transitioning back
@@ -1167,10 +1415,70 @@ function hideTemplate() {
   if (modal) modal.classList.remove('show');
 }
 
+// Build a self-contained SVG cover (1400x1400) for the chosen theme.
+function buildCoverSVG(theme, title, sub) {
+  const e = escapeHTML;
+  const W = 1400;
+  const THEMES = {
+    synthwave: { defs: '<radialGradient id="g" cx="50%" cy="45%" r="72%"><stop offset="0%" stop-color="#9d5cf5"/><stop offset="82%" stop-color="#160c2d"/></radialGradient>', border: '#7c3aed', badge: 'EPISODE 01', mic: '🎙️', titleColor: '#ffffff', subColor: '#ffffff', titleFamily: "Outfit, Inter, sans-serif", italic: 'normal', badgeBg: 'rgba(255,255,255,0.16)', badgeColor: '#ffffff' },
+    tech:      { defs: '<linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0f172a"/><stop offset="100%" stop-color="#0284c7"/></linearGradient>', border: '#06b6d4', badge: 'TECH', mic: '⚡', titleColor: '#ffffff', subColor: '#ffffff', titleFamily: "Outfit, Inter, sans-serif", italic: 'normal', badgeBg: 'rgba(255,255,255,0.16)', badgeColor: '#ffffff' },
+    minimal:   { defs: '<radialGradient id="g" cx="50%" cy="45%" r="72%"><stop offset="0%" stop-color="#fed7aa"/><stop offset="100%" stop-color="#ea580c"/></radialGradient>', border: '#f97316', badge: 'WEEKLY', mic: '🖋️', titleColor: '#0f172a', subColor: '#0f172a', titleFamily: "Georgia, serif", italic: 'italic', badgeBg: 'rgba(15,23,42,0.12)', badgeColor: '#0f172a' }
+  };
+  const t = THEMES[theme] || THEMES.synthwave;
+  const ttl = (title || 'YOUR TITLE');
+  const fs = ttl.length > 12 ? 92 : ttl.length > 8 ? 112 : 134;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${W}" viewBox="0 0 ${W} ${W}">
+  <defs>${t.defs}</defs>
+  <rect width="${W}" height="${W}" fill="url(#g)"/>
+  <rect x="0" y="${W - 30}" width="${W}" height="30" fill="${t.border}"/>
+  <rect x="70" y="70" rx="14" ry="14" width="300" height="68" fill="${t.badgeBg}"/>
+  <text x="220" y="115" font-family="Outfit, Inter, sans-serif" font-weight="800" font-size="34" letter-spacing="6" fill="${t.badgeColor}" text-anchor="middle">${e(t.badge)}</text>
+  <text x="${W / 2}" y="${W / 2 - 110}" font-size="220" text-anchor="middle">${t.mic}</text>
+  <text x="${W / 2}" y="${W / 2 + 110}" font-family="${t.titleFamily}" font-style="${t.italic}" font-weight="900" font-size="${fs}" fill="${t.titleColor}" text-anchor="middle">${e(ttl)}</text>
+  <text x="${W / 2}" y="${W / 2 + 210}" font-family="Inter, sans-serif" font-weight="600" font-size="48" letter-spacing="8" fill="${t.subColor}" opacity="0.85" text-anchor="middle">${e(sub || 'SUBTITLE')}</text>
+</svg>`;
+}
+
+// "Use Template" now exports a real cover image (PNG, with SVG fallback).
 function downloadTemplate() {
-  const inputTitle = document.getElementById('template-input-title')?.value || '';
-  showToast(`Template "${inputTitle || currentSelectedTheme.toUpperCase()}" imported successfully into your editor!`, "success");
-  hideTemplate();
+  const title = (document.getElementById('template-input-title')?.value || '').toUpperCase();
+  const sub = (document.getElementById('template-input-sub')?.value || '').toUpperCase();
+  const theme = currentSelectedTheme || 'synthwave';
+  const svg = buildCoverSVG(theme, title, sub);
+  const svgUrl = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+
+  const triggerDownload = (href, ext) => {
+    const a = document.createElement('a');
+    a.href = href; a.download = `podcast-cover-${theme}.${ext}`;
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+  const fallbackSVG = () => {
+    triggerDownload(svgUrl, 'svg');
+    setTimeout(() => URL.revokeObjectURL(svgUrl), 1000);
+    showToast('Cover downloaded as SVG.', 'success');
+    hideTemplate();
+  };
+
+  const img = new Image();
+  img.onload = () => {
+    let c;
+    try {
+      c = document.createElement('canvas');
+      c.width = 1400; c.height = 1400;
+      c.getContext('2d').drawImage(img, 0, 0, 1400, 1400);
+    } catch (err) { fallbackSVG(); return; }
+    // toBlob is async — handle null inside the callback (a throw here would be uncaught).
+    c.toBlob((b) => {
+      if (!b) { fallbackSVG(); return; }
+      const pngUrl = URL.createObjectURL(b);
+      triggerDownload(pngUrl, 'png');
+      setTimeout(() => { URL.revokeObjectURL(pngUrl); URL.revokeObjectURL(svgUrl); }, 1000);
+      showToast('Cover downloaded as PNG.', 'success');
+      hideTemplate();
+    }, 'image/png');
+  };
+  img.onerror = fallbackSVG;
+  img.src = svgUrl;
 }
 
 /* ── Landing Animations ──────────────────────────── */
@@ -1331,6 +1639,7 @@ document.addEventListener('click', (e) => {
 
   const href = anchor.getAttribute('href');
   if (href === '#' || href === '') return;
+  if (href.startsWith('#/')) return; // workspace routes are handled by the router
 
   const target = document.querySelector(href);
   if (target) {
@@ -1350,18 +1659,48 @@ document.addEventListener('click', (e) => {
 // reflect the server's plan/usage/keys and drop the user straight into the workspace.
 if (window.PF) {
   PF.ready.then((hasBackend) => {
-    if (hasBackend && PF.isAuthed()) {
+    if (!hasBackend) return;
+    if (PF.authError && PF.authError()) {
+      showToast('Sign-in failed: ' + PF.authError(), 'error');
+    }
+    if (PF.isAuthed()) {
       syncBackendUser();
+      if (PF.justAuthenticated && PF.justAuthenticated()) {
+        showToast(`Signed in as ${PF.session.user.email}`, 'success');
+      }
       if (sessionStorage.getItem('pf_view_state') !== 'workspace') {
         sessionStorage.setItem('pf_view_state', 'workspace');
         document.body.classList.add('view-state-workspace', 'workspace-active');
         const landingEl = document.getElementById('landing-view');
         if (landingEl) landingEl.style.display = 'none';
         updateNavLinks(true);
+        updateNavState();
+        updateLocks();
+      }
+      // Render the routed workspace page (deep link or default).
+      if (window.pfRouter) {
+        const r = (location.hash.match(/^#\/([a-z]+)/i) || [])[1] || '';
+        pfRouter.go(r);
       }
     }
   });
 }
+
+// Auto-grow the main text boxes to fit content up to their CSS max-height, then
+// scroll. Keeps boxes from looking stretched/empty and makes overflow obvious.
+// Delegated so it also covers tool textareas rendered later (agent/miner/music).
+const AUTOGROW_IDS = new Set(['transcript', 'ag-input', 'miner-input', 'mu-input']);
+function autoGrow(t) {
+  if (!t || t.tagName !== 'TEXTAREA') return;
+  const max = parseInt(getComputedStyle(t).maxHeight, 10) || 380;
+  t.style.height = 'auto';
+  const h = Math.min(t.scrollHeight, max);
+  t.style.height = h + 'px';
+  t.style.overflowY = t.scrollHeight > max ? 'auto' : 'hidden';
+}
+document.addEventListener('input', (e) => {
+  if (e.target && AUTOGROW_IDS.has(e.target.id)) autoGrow(e.target);
+});
 
 // Run Init
 initAuth();

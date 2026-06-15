@@ -355,7 +355,7 @@ nav {
 .word-count { font-size: 11.5px; color: var(--text-muted); font-weight: 500; }
 
 textarea#transcript {
-  width: 100%; min-height: 340px;
+  width: 100%; min-height: 220px; max-height: 380px; overflow-y: auto;
   background: transparent; border: none; outline: none; resize: vertical;
   padding: 18px 20px; font-family: 'Inter', sans-serif;
   font-size: 13.5px; line-height: 1.8; color: var(--text-primary);
@@ -403,7 +403,7 @@ textarea#transcript::placeholder { color: var(--text-muted); }
 .tab-badge { font-size: 10px; font-weight: 700; padding: 2px 5px; background: rgba(124,58,237,0.2); color: var(--accent-violet2); border-radius: 100px; display: none; }
 .tab-btn.done .tab-badge { display: inline; }
 
-.output-content { min-height: 340px; position: relative; }
+.output-content { flex: 1; min-height: 0; overflow-y: auto; position: relative; }
 .tab-pane { display: none; padding: 20px; animation: fadeIn 0.2s ease; }
 .tab-pane.active { display: block; }
 @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
@@ -1487,3 +1487,154 @@ footer { border-top: 1px solid var(--border); padding: 32px 40px; display: flex;
 .gen-tpl-select:focus { border-color: var(--accent-violet); }
 .gen-tpl-select optgroup { background: var(--bg-card); color: var(--text-secondary); }
 .gen-tpl-select option { background: var(--bg-card); color: var(--text-primary); }
+
+/* ── Nav account chip (signed-in identity) ──────── */
+.nav-account {
+  display: inline-flex; align-items: center; gap: 6px;
+  max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 12.5px; font-weight: 600; color: var(--text-secondary);
+  background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+  border-radius: 100px; padding: 5px 12px;
+}
+.nav-account::before { content: '👤'; font-size: 12px; }
+
+/* ── Auth modal: mode tabs, hints, disabled SSO ──── */
+.auth-tabs {
+  display: flex; gap: 6px; background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border); border-radius: 100px;
+  padding: 4px; margin-bottom: 22px;
+}
+.auth-tab {
+  flex: 1; padding: 9px 12px; border: none; cursor: pointer;
+  background: transparent; color: var(--text-secondary);
+  font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600;
+  border-radius: 100px; transition: var(--transition-fast);
+}
+.auth-tab.active { background: var(--accent-violet); color: #fff; }
+.auth-hint { font-size: 11.5px; color: var(--text-muted); margin: 0 2px 18px; }
+.sso-hint {
+  font-size: 11.5px; color: var(--accent-amber);
+  text-align: center; margin: 2px 0 0;
+}
+.btn-sso.disabled, .btn-sso:disabled {
+  opacity: 0.4; cursor: not-allowed; filter: grayscale(0.6);
+}
+
+/* ── Chat assistant (upgraded) ──────────────────── */
+.pf-chat-msg {
+  max-width: 92%; padding: 9px 12px; border-radius: 10px;
+  font-size: 13px; line-height: 1.5; word-break: break-word;
+  animation: fadeIn 0.2s ease;
+}
+.pf-chat-user {
+  align-self: flex-end; background: rgba(124,58,237,0.14);
+  border: 1px solid rgba(124,58,237,0.3); border-bottom-right-radius: 3px;
+}
+.pf-chat-ai {
+  align-self: flex-start; background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1); border-bottom-left-radius: 3px;
+}
+.pf-chat-who {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.4px;
+  text-transform: uppercase; color: var(--text-muted); margin-bottom: 3px;
+}
+.pf-chat-body { color: var(--text-primary); white-space: pre-wrap; }
+.pf-chat-applied {
+  margin-top: 6px; font-size: 11px; font-weight: 600; color: var(--accent-green);
+  background: rgba(16,185,129,0.1); border-radius: 5px; padding: 3px 7px; display: inline-block;
+}
+.pf-chat-dots { display: flex; gap: 4px; padding: 4px 2px; }
+.pf-chat-dots span {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted);
+  animation: pf-dot 1.2s infinite ease-in-out both;
+}
+.pf-chat-dots span:nth-child(2) { animation-delay: 0.15s; }
+.pf-chat-dots span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes pf-dot { 0%,80%,100% { opacity: 0.3; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .pf-chat-dots span { animation: none; } }
+
+/* ── Account panel ──────────────────────────────── */
+.nav-account { cursor: pointer; }
+.nav-account:hover { border-color: rgba(124,58,237,0.4); color: var(--text-primary); }
+.ac-sec { padding: 16px 0; border-top: 1px solid var(--border); }
+.ac-sec:first-child { border-top: none; }
+.ac-h { font-size: 11px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 12px; }
+.ac-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13.5px; color: var(--text-secondary); padding: 5px 0; }
+.ac-row b { color: var(--text-primary); font-weight: 600; }
+.ac-mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-muted); }
+.ac-muted { font-size: 12.5px; color: var(--text-muted); padding: 4px 0; }
+.ac-use { margin-bottom: 12px; }
+.ac-use-top { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--text-secondary); margin-bottom: 5px; }
+.ac-bar { height: 6px; background: var(--bg-input); border-radius: 999px; overflow: hidden; }
+.ac-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent-violet), var(--accent-cyan)); border-radius: 999px; transition: width 0.3s ease; }
+.ac-rm { background: transparent; border: 1px solid var(--border); color: var(--text-muted); border-radius: 5px; padding: 4px 10px; font-size: 11.5px; font-weight: 600; cursor: pointer; }
+.ac-rm:hover { border-color: var(--accent-red); color: var(--accent-red); }
+.ac-cur { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); border-radius: 5px; padding: 4px 10px; font-size: 12px; font-weight: 600; cursor: pointer; margin-left: 6px; }
+.ac-cur.on { background: var(--accent-violet); border-color: var(--accent-violet); color: #fff; }
+.ac-signout { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); border-radius: 5px; padding: 5px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.ac-signout:hover { border-color: var(--accent-red); color: var(--accent-red); }
+.ac-hist { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid rgba(255,255,255,0.04); font-size: 12.5px; }
+.ac-hist:first-child { border-top: none; }
+.ac-hist-f { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; color: var(--accent-violet2); background: rgba(124,58,237,0.12); border-radius: 4px; padding: 3px 6px; flex-shrink: 0; }
+.ac-hist-p { flex: 1; min-width: 0; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-hist-t { color: var(--text-muted); flex-shrink: 0; font-size: 11px; }
+.ac-mock { font-size: 9px; background: rgba(245,158,11,0.15); color: var(--accent-amber); border-radius: 3px; padding: 2px 5px; vertical-align: middle; }
+
+/* ── Workspace router: one tool per page with transitions ── */
+.workspace-active .ws-page { display: none; }
+.workspace-active .ws-page.ws-active { display: block; }
+.ws-anim { animation: wsPageIn 0.45s cubic-bezier(0.25, 1, 0.5, 1); }
+@keyframes wsPageIn { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+.nav-route { position: relative; }
+.nav-route.nav-active { color: var(--text-primary); }
+.nav-route.nav-active::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -6px; height: 2px;
+  background: linear-gradient(90deg, var(--accent-violet), var(--accent-cyan));
+  border-radius: 2px;
+}
+@media (prefers-reduced-motion: reduce) { .ws-anim { animation: none; } }
+
+/* ============================================================
+   v2.4 — Workspace layout + scroll affordance fixes
+   ============================================================ */
+
+/* Marketing Pricing + footer must NOT bleed into the routed app workspace.
+   They belong to the landing page only; in-app upgrades use the paywall modal. */
+.workspace-active #pricing,
+.workspace-active footer { display: none !important; }
+
+/* Cap + scroll all tool input boxes so none stretch the page. */
+.ag-input, .mn-input, .mu-input { max-height: 300px; overflow-y: auto; }
+
+/* Make scrollbars clearly visible inside workspace boxes (the old 5px sliver
+   read as "no scrolling"). Firefox + WebKit. */
+textarea#transcript, .ag-input, .mn-input, .mu-input, .tr-input,
+#chat-history, .tr-out, .st-out, .ag-text, .mn-draft-out, .output-content {
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent-violet2) var(--bg-input);
+}
+textarea#transcript::-webkit-scrollbar,
+.ag-input::-webkit-scrollbar, .mn-input::-webkit-scrollbar, .mu-input::-webkit-scrollbar,
+.tr-input::-webkit-scrollbar, #chat-history::-webkit-scrollbar, .tr-out::-webkit-scrollbar,
+.st-out::-webkit-scrollbar, .ag-text::-webkit-scrollbar, .mn-draft-out::-webkit-scrollbar,
+.output-content::-webkit-scrollbar {
+  width: 12px;
+}
+textarea#transcript::-webkit-scrollbar-track,
+.ag-input::-webkit-scrollbar-track, .mn-input::-webkit-scrollbar-track, .mu-input::-webkit-scrollbar-track,
+.tr-input::-webkit-scrollbar-track, #chat-history::-webkit-scrollbar-track, .tr-out::-webkit-scrollbar-track,
+.st-out::-webkit-scrollbar-track, .ag-text::-webkit-scrollbar-track, .mn-draft-out::-webkit-scrollbar-track,
+.output-content::-webkit-scrollbar-track {
+  background: var(--bg-input); border-radius: 6px;
+}
+textarea#transcript::-webkit-scrollbar-thumb,
+.ag-input::-webkit-scrollbar-thumb, .mn-input::-webkit-scrollbar-thumb, .mu-input::-webkit-scrollbar-thumb,
+.tr-input::-webkit-scrollbar-thumb, #chat-history::-webkit-scrollbar-thumb, .tr-out::-webkit-scrollbar-thumb,
+.st-out::-webkit-scrollbar-thumb, .ag-text::-webkit-scrollbar-thumb, .mn-draft-out::-webkit-scrollbar-thumb,
+.output-content::-webkit-scrollbar-thumb {
+  background: var(--accent-violet); border-radius: 6px; border: 2px solid var(--bg-input);
+}
+textarea#transcript::-webkit-scrollbar-thumb:hover,
+.ag-input::-webkit-scrollbar-thumb:hover, .mn-input::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-violet2);
+}
