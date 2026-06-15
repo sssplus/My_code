@@ -55,11 +55,13 @@
     showPage(route);
   }
 
-  // Public: navigate to a workspace route.
+  // Public: navigate to a workspace route. Switch the page immediately (don't
+  // wait for the async hashchange) and update the URL; the hashchange handler
+  // re-runs showPage idempotently for back/forward navigation.
   function go(route) {
     const target = ROUTES.includes(route) ? route : DEFAULT_ROUTE;
-    if (parseRoute() === target) { showPage(target); }
-    else { location.hash = `#/${target}`; }   // triggers onHashChange
+    if (location.hash !== `#/${target}`) location.hash = `#/${target}`;
+    showPage(target);
   }
 
   window.pfRouter = { go, showPage, DEFAULT_ROUTE };

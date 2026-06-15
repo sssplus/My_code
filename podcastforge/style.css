@@ -403,7 +403,7 @@ textarea#transcript::placeholder { color: var(--text-muted); }
 .tab-badge { font-size: 10px; font-weight: 700; padding: 2px 5px; background: rgba(124,58,237,0.2); color: var(--accent-violet2); border-radius: 100px; display: none; }
 .tab-btn.done .tab-badge { display: inline; }
 
-.output-content { min-height: 340px; position: relative; }
+.output-content { flex: 1; min-height: 0; overflow-y: auto; position: relative; }
 .tab-pane { display: none; padding: 20px; animation: fadeIn 0.2s ease; }
 .tab-pane.active { display: block; }
 @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
