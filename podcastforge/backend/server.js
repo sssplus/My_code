@@ -24,7 +24,7 @@ const sec = require('./lib/security');
 const store = require('./lib/store');
 const providers = require('./lib/providers');
 const oauth = require('./lib/oauth');
-const { safeFetchText } = require('./lib/safefetch');
+const { safeFetchText, safeFetchBuffer } = require('./lib/safefetch');
 const rss = require('./lib/rss');
 
 // Conservative NSFW guard for pulled podcasts (in addition to the iTunes/RSS
@@ -49,9 +49,9 @@ const TRIAL_DAYS = 15;
 // Per-feature daily caps for the FREE plan. trial/fixed/payg are unlimited.
 // Each unit is one AI call: the Miner makes one call per transcript section,
 // so its cap is measured in sections; Generator/Studio/Tracker are 1 call each.
-const FREE_LIMITS = { generate: 5, studio: 5, miner: 10, tracker: 2, agent: 8, music: 5, chat: 15 };
+const FREE_LIMITS = { generate: 5, studio: 5, miner: 10, tracker: 2, agent: 8, music: 5, chat: 15, transcribe: 2 };
 const FEATURES = Object.keys(FREE_LIMITS);
-const FEATURE_LABEL = { generate: 'content generation', studio: 'Script Studio', miner: 'the Content Miner', tracker: 'the AI Stack audit', agent: 'the Auto-Repurpose agent', music: 'the Music Brief', chat: 'the chat assistant' };
+const FEATURE_LABEL = { generate: 'content generation', studio: 'Script Studio', miner: 'the Content Miner', tracker: 'the AI Stack audit', agent: 'the Auto-Repurpose agent', music: 'the Music Brief', chat: 'the chat assistant', transcribe: 'audio transcription' };
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -217,10 +217,68 @@ function handleListKeys(req, res, user) {
 // Podcast discovery via Apple's free iTunes Search API (no key). Done
 // server-side to avoid CORS and to enforce a content filter centrally:
 // explicit-flagged shows are dropped so users can't pull NSFW podcasts.
-// List episodes from a podcast RSS feed that have transcripts available.
+// Resolve a user-supplied link (Apple/Spotify/YouTube/any page) or a bare
+// podcast name to an RSS feed URL. Podcasts are RSS under the hood; the various
+// directories are just players over the same feeds, so we map back to the feed:
+//   - Apple URL  -> iTunes lookup by show id
+//   - RSS/Atom   -> use as-is
+//   - other page -> read its <title>/og:title, then iTunes-search by that name
+//   - bare text  -> iTunes-search by name
+async function itunesSearchFeed(term) {
+  const url = `https://itunes.apple.com/search?media=podcast&entity=podcast&limit=1&term=${encodeURIComponent(term)}`;
+  try {
+    const r = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(12000) });
+    const d = await r.json();
+    const hit = (d.results || []).find(x => x.feedUrl);
+    return hit ? { feedUrl: hit.feedUrl, name: hit.collectionName } : null;
+  } catch (e) { return null; }
+}
+async function resolveToFeed(input) {
+  const raw = String(input || '').trim();
+  if (!raw) throw { status: 400, message: 'Provide a podcast link, RSS URL, or name.' };
+
+  // Not a URL → treat as a search term.
+  if (!/^https?:\/\//i.test(raw)) {
+    const hit = await itunesSearchFeed(raw);
+    if (!hit) throw { status: 404, message: 'No podcast found by that name.' };
+    return hit.feedUrl;
+  }
+
+  // Apple Podcasts URL → look up the feed by show id.
+  const appleId = raw.match(/podcasts\.apple\.com\/.*\/id(\d+)/i) || raw.match(/[?&]i=(\d+)/);
+  if (/podcasts\.apple\.com/i.test(raw) && appleId) {
+    try {
+      const r = await fetch(`https://itunes.apple.com/lookup?id=${appleId[1]}&entity=podcast`, { signal: AbortSignal.timeout(12000) });
+      const d = await r.json();
+      const hit = (d.results || []).find(x => x.feedUrl);
+      if (hit) return hit.feedUrl;
+    } catch (e) { /* fall through */ }
+  }
+
+  // Fetch the URL; if it's already an RSS/Atom feed, use it directly.
+  const { text, contentType } = await safeFetchText(raw, { maxBytes: 3 * 1024 * 1024, timeoutMs: 15000 });
+  const head = text.slice(0, 2000).toLowerCase();
+  if (contentType.includes('xml') || contentType.includes('rss') || /<rss\b|<feed\b|<\?xml/.test(head)) {
+    return raw;
+  }
+
+  // Otherwise it's a web page (Spotify/YouTube/etc.) — pull a title and search Apple.
+  const og = text.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i);
+  const title = (og && og[1]) || (text.match(/<title[^>]*>([^<]+)<\/title>/i) || [])[1] || '';
+  const cleaned = title.replace(/\s*[-|·]\s*(spotify|youtube|apple podcasts|amazon music).*$/i, '').trim();
+  if (cleaned) {
+    const hit = await itunesSearchFeed(cleaned);
+    if (hit) return hit.feedUrl;
+  }
+  throw { status: 422, message: 'Could not find an RSS feed for that link. Try the show’s name or its RSS URL.' };
+}
+
+// List episodes from a podcast (resolved from any link/name) — flags which have
+// published transcripts and which can be transcribed from audio.
 async function handlePodcastEpisodes(req, res, user, query) {
-  const feedUrl = String(query.feedUrl || '').trim();
-  if (!feedUrl) throw { status: 400, message: 'Provide a podcast RSS feed URL.' };
+  const input = String(query.feedUrl || '').trim();
+  if (!input) throw { status: 400, message: 'Provide a podcast link, RSS URL, or name.' };
+  const feedUrl = await resolveToFeed(input);
   const { text } = await safeFetchText(feedUrl, { maxBytes: 5 * 1024 * 1024, timeoutMs: 15000 });
   const feed = rss.parseFeed(text);
 
@@ -238,10 +296,64 @@ async function handlePodcastEpisodes(req, res, user, query) {
       pubDate: it.pubDate,
       hasTranscript: !!it.transcriptUrl,
       transcriptUrl: it.transcriptUrl,
-      transcriptType: it.transcriptType
+      transcriptType: it.transcriptType,
+      audioUrl: it.audioUrl || ''
     }));
 
-  sendJSON(res, 200, { podcast: { title: feed.title }, episodes, withTranscript: episodes.filter(e => e.hasTranscript).length });
+  sendJSON(res, 200, { podcast: { title: feed.title }, feedUrl, episodes, withTranscript: episodes.filter(e => e.hasTranscript).length });
+}
+
+// Generate a transcript from episode AUDIO via the user's OpenAI (Whisper-
+// compatible) key, for episodes that don't publish one. Podcast RSS audio only
+// (YouTube/Amazon audio isn't accessible via API).
+async function handlePodcastTranscribe(req, res, user) {
+  const plan = effectivePlan(user);
+  if (plan === 'expired') throw { status: 402, message: 'Your trial has ended. Choose a plan to keep transcribing.' };
+  if (plan === 'free' && featureCount(user, 'transcribe') >= FREE_LIMITS.transcribe) {
+    throw { status: 429, message: `Daily free limit reached for ${FEATURE_LABEL.transcribe} (${FREE_LIMITS.transcribe}/day). Upgrade for more.` };
+  }
+
+  const { audioUrl } = await readBody(req);
+  if (!audioUrl) throw { status: 400, message: 'No episode audio URL provided.' };
+  const key = (user.keys && user.keys.openai) ? sec.decryptKey(user.keys.openai) : null;
+  if (!key) throw { status: 400, message: 'Add an OpenAI API key (Whisper) to generate transcripts from audio.' };
+
+  // OpenAI audio transcription caps uploads at 25 MB.
+  let buffer, contentType;
+  try {
+    ({ buffer, contentType } = await safeFetchBuffer(audioUrl, { maxBytes: 25 * 1024 * 1024, timeoutMs: 60000 }));
+  } catch (e) {
+    if (e && e.status === 413) throw { status: 413, message: 'This episode’s audio exceeds the 25 MB transcription limit. Try a shorter episode.' };
+    throw e;
+  }
+
+  const form = new FormData();
+  form.append('model', 'whisper-1');
+  form.append('response_format', 'text');
+  form.append('file', new Blob([buffer], { type: contentType || 'audio/mpeg' }), 'episode.mp3');
+
+  let oaRes;
+  try {
+    oaRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form, signal: AbortSignal.timeout(180000)
+    });
+  } catch (e) {
+    throw { status: 504, message: 'Transcription request timed out. Try a shorter episode.' };
+  }
+  if (!oaRes.ok) {
+    const errJson = await oaRes.json().catch(() => ({}));
+    const msg = (errJson.error && errJson.error.message) || `HTTP ${oaRes.status}`;
+    if (oaRes.status === 401) throw { status: 401, message: `OpenAI rejected your key: ${msg}` };
+    throw { status: 502, message: `Transcription failed: ${msg}` };
+  }
+  const textOut = (await oaRes.text()).trim();
+  if (!textOut || textOut.length < 10) throw { status: 422, message: 'Transcription produced no usable text.' };
+  if (looksNSFW(textOut.slice(0, 4000))) throw { status: 451, message: 'This transcript was flagged as explicit and was blocked.' };
+
+  if (plan === 'free') { bumpFeature(user, 'transcribe'); }
+  pushHistory(user, { feature: 'transcribe', at: new Date().toISOString(), preview: textOut.slice(0, 80) });
+  await store.saveUser(user);
+  sendJSON(res, 200, { text: textOut.slice(0, 200000) });
 }
 
 // Fetch one transcript file and return clean plain text.
@@ -496,6 +608,7 @@ const server = http.createServer(async (req, res) => {
     if (url === '/api/discover' && method === 'GET') return await handleDiscover(req, res, user, query);
     if (url === '/api/podcast/episodes' && method === 'GET') return await handlePodcastEpisodes(req, res, user, query);
     if (url === '/api/podcast/transcript' && method === 'GET') return await handlePodcastTranscript(req, res, user, query);
+    if (url === '/api/podcast/transcribe' && method === 'POST') return await handlePodcastTranscribe(req, res, user);
     if (url === '/api/ai' && method === 'POST') return await handleAI(req, res, user);
     if (url === '/api/billing/checkout' && method === 'POST') return await handleCheckout(req, res, user);
 

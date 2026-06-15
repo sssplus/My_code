@@ -118,6 +118,10 @@
       const d = await api(`/api/podcast/transcript?${new URLSearchParams({ url }).toString()}`);
       return d.text;
     },
+    async transcribeAudio(audioUrl) {
+      const d = await api('/api/podcast/transcribe', { method: 'POST', body: { audioUrl } });
+      return d.text;
+    },
     async callAI(systemPrompt, userPrompt, provider, feature) {
       const d = await api('/api/ai', { method: 'POST', body: { systemPrompt, userPrompt, provider, feature } });
       if (state.user && d.usage) state.user.usage = d.usage;

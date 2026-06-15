@@ -98,11 +98,14 @@ function defaultRawGet(urlStr, { timeoutMs = 15000, maxBytes = 5 * 1024 * 1024 }
         if (size > maxBytes) { req.destroy(); reject({ status: 413, message: 'That file is too large.' }); return; }
         chunks.push(d);
       });
-      res.on('end', () => resolve({
-        status: res.statusCode, headers: res.headers,
-        body: Buffer.concat(chunks).toString('utf8'),
-        contentType: (res.headers['content-type'] || '').toLowerCase()
-      }));
+      res.on('end', () => {
+        const buffer = Buffer.concat(chunks);
+        resolve({
+          status: res.statusCode, headers: res.headers, buffer,
+          body: buffer.toString('utf8'),
+          contentType: (res.headers['content-type'] || '').toLowerCase()
+        });
+      });
       res.on('error', () => reject({ status: 502, message: 'Could not read response.' }));
     });
     req.on('error', (e) => reject(e && e.code === 'EBLOCKED'
@@ -118,18 +121,28 @@ let _rawGet = defaultRawGet;
 function _setRawGet(fn) { _rawGet = fn || defaultRawGet; }
 
 async function safeFetchText(target, { maxBytes = 5 * 1024 * 1024, timeoutMs = 15000 } = {}) {
+  const r = await safeFetchRaw(target, { maxBytes, timeoutMs });
+  return { text: r.buffer ? r.buffer.toString('utf8') : (r.body || ''), contentType: r.contentType || '' };
+}
+
+// Binary-safe fetch (for audio etc.) — same SSRF guard + redirect re-validation.
+async function safeFetchBuffer(target, { maxBytes = 30 * 1024 * 1024, timeoutMs = 60000 } = {}) {
+  const r = await safeFetchRaw(target, { maxBytes, timeoutMs });
+  return { buffer: r.buffer || Buffer.from(r.body || '', 'utf8'), contentType: r.contentType || '' };
+}
+
+async function safeFetchRaw(target, { maxBytes, timeoutMs } = {}) {
   let current = await assertPublicUrl(target);
   for (let hop = 0; hop < 6; hop++) {
     const r = await _rawGet(current, { maxBytes, timeoutMs });
     if (r.status >= 300 && r.status < 400 && r.headers && r.headers.location) {
-      // Re-validate the redirect target BEFORE following it.
       current = await assertPublicUrl(new URL(r.headers.location, current).toString());
       continue;
     }
     if (r.status < 200 || r.status >= 300) throw { status: 502, message: `Source returned HTTP ${r.status}.` };
-    return { text: r.body, contentType: r.contentType || '' };
+    return r;
   }
   throw { status: 508, message: 'Too many redirects.' };
 }
 
-module.exports = { assertPublicUrl, safeFetchText, isPrivateIp, guardedLookup, _setRawGet };
+module.exports = { assertPublicUrl, safeFetchText, safeFetchBuffer, isPrivateIp, guardedLookup, _setRawGet };
