@@ -26,6 +26,7 @@ const providers = require('./lib/providers');
 const oauth = require('./lib/oauth');
 const { safeFetchText, safeFetchBuffer } = require('./lib/safefetch');
 const rss = require('./lib/rss');
+const ratelimit = require('./lib/ratelimit');
 
 // Conservative NSFW guard for pulled podcasts (in addition to the iTunes/RSS
 // explicit flags). Kept tight to avoid flagging legitimate shows.
@@ -59,11 +60,62 @@ const MIME = {
   '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon', '.map': 'application/json'
 };
 
+// Behind a trusted reverse proxy (set TRUST_PROXY=1) the real client IP is the
+// first hop in X-Forwarded-For; otherwise that header is attacker-controlled and
+// must be ignored, so we use the socket address. Used only as a rate-limit key.
+const TRUST_PROXY = process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true';
+function clientIp(req) {
+  if (TRUST_PROXY) {
+    const xff = req.headers['x-forwarded-for'];
+    if (xff) return String(xff).split(',')[0].trim();
+  }
+  return (req.socket && req.socket.remoteAddress) || 'unknown';
+}
+
+/* Content-Security-Policy: the SPA uses inline event handlers and injected
+   <style> blocks, so 'unsafe-inline' is required for script/style — but we still
+   pin the allowed CDN/script origins (so an injected <script src=evil> is
+   blocked), forbid plugins/base-tag hijacking, and forbid framing of the app
+   (clickjacking). The payment + animation CDNs are allow-listed explicitly. */
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://*.razorpay.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: https:",
+  "font-src 'self' data:",
+  "connect-src 'self' https://*.razorpay.com",
+  "frame-src https://*.razorpay.com https://api.razorpay.com",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'"
+].join('; ');
+
+// Applied to every response (static + API). Cheap, broad hardening.
+function setSecurityHeaders(res) {
+  res.setHeader('Content-Security-Policy', CSP);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=(self "https://checkout.razorpay.com")');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  // Only advertise HSTS when actually served over TLS (production).
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+}
+
 /* ---- helpers ---- */
 function sendJSON(res, status, obj) {
   const body = JSON.stringify(obj);
   res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   res.end(body);
+}
+
+// Reject and report a throttled request with a Retry-After hint.
+function tooMany(res, retryAfter) {
+  res.writeHead(429, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Retry-After': String(retryAfter) });
+  res.end(JSON.stringify({ error: 'Too many requests. Please slow down and try again shortly.' }));
 }
 
 function readBody(req) {
@@ -180,8 +232,13 @@ async function handleSignup(req, res) {
 async function handleLogin(req, res) {
   const { email, password } = await readBody(req);
   const user = await store.getUserByEmail(email);
-  // Same generic message whether the email is unknown or the password is wrong
-  if (!user || !sec.verifyPassword(password, user.password)) {
+  // Same generic message — and same scrypt cost — whether the email is unknown
+  // or the password is wrong, so response timing can't be used to enumerate
+  // which emails have accounts. OAuth-only accounts have no password set.
+  const passOk = (user && typeof user.password === 'string')
+    ? sec.verifyPassword(password, user.password)
+    : sec.dummyVerify(password);
+  if (!user || !passOk) {
     throw { status: 401, message: 'Invalid email or password.' };
   }
   sendJSON(res, 200, { token: sec.signToken(user.id), user: publicUser(user) });
@@ -566,9 +623,29 @@ const server = http.createServer(async (req, res) => {
   const url = (req.url || '').split('?')[0];
   const method = req.method;
 
+  // Security headers on every response (static assets + API).
+  setSecurityHeaders(res);
+
   if (!url.startsWith('/api/')) return serveStatic(req, res);
 
   const query = Object.fromEntries(new URLSearchParams((req.url.split('?')[1] || '')));
+  const ip = clientIp(req);
+
+  // Coarse per-IP throttle across the whole API surface (flood protection),
+  // plus stricter buckets for the sensitive auth endpoints below.
+  {
+    const g = ratelimit.check('api', ip, 300, 5 * 60 * 1000);
+    if (!g.ok) return tooMany(res, g.retryAfter);
+  }
+  // Brute-force / abuse protection on auth. Login + OAuth start share a tight
+  // window; signup is capped per hour to curb mass account creation.
+  if (method === 'POST' && (url === '/api/auth/login' || url === '/api/auth/signup')) {
+    const isLogin = url.endsWith('/login');
+    const r = isLogin
+      ? ratelimit.check('login', ip, 10, 15 * 60 * 1000)
+      : ratelimit.check('signup', ip, 5, 60 * 60 * 1000);
+    if (!r.ok) return tooMany(res, r.retryAfter);
+  }
 
   try {
     if (url === '/api/health' && method === 'GET') {

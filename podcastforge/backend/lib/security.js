@@ -61,6 +61,16 @@ function verifyPassword(password, stored) {
   return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
 }
 
+// Constant-time-ish guard against user enumeration on login: when no account
+// exists for an email, callers run this so an unknown-email request costs the
+// same scrypt work as a wrong-password one (otherwise response latency leaks
+// which emails are registered). The dummy hash is generated once at startup.
+const DUMMY_HASH = hashPassword(crypto.randomBytes(16).toString('hex'));
+function dummyVerify(password) {
+  try { verifyPassword(String(password || ''), DUMMY_HASH); } catch (e) { /* ignore */ }
+  return false;
+}
+
 /* ---- stateless session tokens (HMAC-SHA256) ---- */
 const b64url = (buf) => Buffer.from(buf).toString('base64url');
 
@@ -131,7 +141,7 @@ function verifyData(token) {
 }
 
 module.exports = {
-  hashPassword, verifyPassword,
+  hashPassword, verifyPassword, dummyVerify,
   signToken, verifyToken,
   signData, verifyData,
   encryptKey, decryptKey,
