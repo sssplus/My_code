@@ -81,6 +81,14 @@ var PLAYER = (function() {
       completedQuests: [],
       flags:           {},      // story flags
 
+      // Progression depth (Layers 2/4/7)
+      masteryPoints:   1,       // earned on level-up, spent in skill trees
+      masteryNodes:    [],      // unlocked skill-tree node ids
+      monsterCodex:    {},      // enemyType → kill count
+      codexTraits:     [],      // absorbed essence trait ids
+      passives:        [],      // passive ability ids (e.g. 'dodge')
+      corruption:      0,       // Void corruption meter (0-100)
+
       // Position
       zone: king.mapZone,
       x: king.startPos.x,
@@ -162,7 +170,102 @@ var PLAYER = (function() {
     if (state.origin === 'noble' || state.origin === 'prince') {
       state.def += Math.floor(state.level * 0.5);
     }
+
+    // Progression bonuses: mastery-tree stat nodes + absorbed codex traits
+    var bonus = getProgressionBonus();
+    state.maxHp += bonus.hp; state.maxMp += bonus.mp; state.maxSp += bonus.sp;
+    state.atk   += bonus.atk; state.def += bonus.def; state.mag += bonus.mag; state.agi += bonus.agi;
+    // Don't let current pools exceed the new maxima boundlessly; clamp.
+    if (state.hp > state.maxHp) state.hp = state.maxHp;
+    if (state.mp > state.maxMp) state.mp = state.maxMp;
+    if (state.sp > state.maxSp) state.sp = state.maxSp;
   }
+
+  // ── Progression: mastery trees, codex, passives (Layers 2/4/7) ──
+  function getProgressionBonus() {
+    var b = { hp:0, mp:0, sp:0, atk:0, def:0, mag:0, agi:0 };
+    function add(stat) {
+      if (!stat) return;
+      Object.keys(stat).forEach(function(k) { if (b[k] !== undefined) b[k] += stat[k]; });
+    }
+    // Mastery nodes
+    var tree = DATA.SKILL_TREES[state.origin];
+    if (tree && state.masteryNodes) {
+      tree.branches.forEach(function(br) {
+        br.nodes.forEach(function(node) {
+          if (state.masteryNodes.indexOf(node.id) !== -1 && node.grants && node.grants.stat) add(node.grants.stat);
+        });
+      });
+    }
+    // Codex traits
+    (state.codexTraits || []).forEach(function(tid) {
+      var tr = DATA.CODEX_TRAITS[tid];
+      if (tr && tr.stat) add(tr.stat);
+    });
+    return b;
+  }
+
+  // Find a mastery node by id across the origin's tree.
+  function findMasteryNode(nodeId) {
+    var tree = DATA.SKILL_TREES[state.origin];
+    if (!tree) return null;
+    for (var i = 0; i < tree.branches.length; i++) {
+      var found = tree.branches[i].nodes.find(function(n) { return n.id === nodeId; });
+      if (found) return found;
+    }
+    return null;
+  }
+
+  function canUnlockNode(nodeId) {
+    var node = findMasteryNode(nodeId);
+    if (!node) return false;
+    if (state.masteryNodes.indexOf(nodeId) !== -1) return false;     // already owned
+    if (state.masteryPoints < node.cost) return false;               // can't afford
+    if (node.req && state.masteryNodes.indexOf(node.req) === -1) return false; // prereq
+    return true;
+  }
+
+  // Spend points to unlock a node. Returns the node on success, else null.
+  function unlockMasteryNode(nodeId) {
+    if (!canUnlockNode(nodeId)) return null;
+    var node = findMasteryNode(nodeId);
+    state.masteryPoints -= node.cost;
+    state.masteryNodes.push(nodeId);
+    if (node.grants) {
+      if (node.grants.skill && state.skills.indexOf(node.grants.skill) === -1) state.skills.push(node.grants.skill);
+      if (node.grants.passive && state.passives.indexOf(node.grants.passive) === -1) state.passives.push(node.grants.passive);
+    }
+    recalcStats();
+    return node;
+  }
+
+  // Record a kill toward the Monster Codex; returns the absorbed trait
+  // (with name) the moment a threshold is crossed, else null.
+  function recordKill(enemyType) {
+    if (!enemyType) return null;
+    state.monsterCodex[enemyType] = (state.monsterCodex[enemyType] || 0) + 1;
+    var entry = DATA.MONSTER_CODEX[enemyType];
+    if (!entry) return null;
+    if (state.monsterCodex[enemyType] === entry.threshold && state.codexTraits.indexOf(entry.trait) === -1) {
+      return addCodexTrait(entry.trait);
+    }
+    return null;
+  }
+
+  function addCodexTrait(traitId) {
+    var tr = DATA.CODEX_TRAITS[traitId];
+    if (!tr || state.codexTraits.indexOf(traitId) !== -1) return null;
+    state.codexTraits.push(traitId);
+    if (tr.passive && state.passives.indexOf(tr.passive) === -1) state.passives.push(tr.passive);
+    recalcStats();
+    return Object.assign({ id: traitId }, tr);
+  }
+
+  function hasPassive(name) { return (state.passives || []).indexOf(name) !== -1; }
+  function getDodgeChance() { return hasPassive('dodge') ? 0.15 : 0; }
+
+  // Bloodline / crisis awakening (Layer 7): granted by story flags, not grind.
+  function awaken(traitId) { return addCodexTrait(traitId); }
 
   function heal(amount) {
     state.hp = Math.min(state.maxHp, state.hp + amount);
@@ -211,6 +314,9 @@ var PLAYER = (function() {
       case 'commoner':
         b.hp  += 10; b.atk += 3; b.agi += 2; b.sp += 7; break;
     }
+    // Mastery Point per level (Layer 2). Anti-grind: cap still applies.
+    state.masteryPoints = (state.masteryPoints || 0) + 1;
+
     // Restore full
     recalcStats();
     state.hp = state.maxHp;
@@ -416,6 +522,8 @@ var PLAYER = (function() {
     addItem, removeItem, hasItem, useItem,
     startQuest, completeObjective, completeQuest,
     setFlag, getFlag,
+    getProgressionBonus, findMasteryNode, canUnlockNode, unlockMasteryNode,
+    recordKill, addCodexTrait, hasPassive, getDodgeChance, awaken,
     meetRomanceLead, adjustApproval, progressRomanceArc,
     getRankName, promoteRank,
     buildCombatant, syncFromCombatant,

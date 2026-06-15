@@ -1016,6 +1016,115 @@ var DATA = {
         { text:'Stall for time',               effects:{ councilTrust:-5, foreignRel:{veranthos:-5} }, desc:'Indecision is a decision. The window narrows.' }
       ]
     }
-  ]
+  ],
+
+  // ── Class Skill Trees (Layer 2) ─────────────────────────────
+  //  3 branches per origin; each node grants a skill or a permanent
+  //  stat. Spend Mastery Points (earned on level-up) to unlock.
+  //  stat keys: hp/mp/sp → max pools; atk/def/mag/agi → flat.
+  SKILL_TREES: {
+    sword_clan: { branches: [
+      { id:'duelist', name:'Duelist', color:'#68BCC5', nodes:[
+        { id:'sc_d1', name:'Footwork',       cost:1, grants:{stat:{agi:3}},            desc:'+3 AGI' },
+        { id:'sc_d2', name:'Riposte',        cost:1, grants:{skill:'iron_parry'},      req:'sc_d1', desc:'Learn Iron Parry' },
+        { id:'sc_d3', name:'Killing Stance', cost:2, grants:{skill:'killing_stance'},  req:'sc_d2', desc:'Armor-piercing strike' } ]},
+      { id:'berserker', name:'Berserker', color:'#C91A09', nodes:[
+        { id:'sc_b1', name:'Brute Force',    cost:1, grants:{stat:{atk:3}},            desc:'+3 ATK' },
+        { id:'sc_b2', name:'Cleave',         cost:1, grants:{skill:'cleave'},          req:'sc_b1', desc:'Hit all enemies' },
+        { id:'sc_b3', name:'Clan Frenzy',    cost:2, grants:{skill:'clan_frenzy'},     req:'sc_b2', desc:'+30% ATK frenzy' } ]},
+      { id:'tactician', name:'Tactician', color:'#77C537', nodes:[
+        { id:'sc_t1', name:'Conditioning',   cost:1, grants:{stat:{hp:20}},            desc:'+20 max HP' },
+        { id:'sc_t2', name:'Blade Dance',    cost:1, grants:{skill:'blade_dance'},     req:'sc_t1', desc:'3-hit bleed combo' },
+        { id:'sc_t3', name:'Iron Body',      cost:2, grants:{stat:{def:4}},            req:'sc_t2', desc:'+4 DEF' } ]} ] },
+    mage_clan: { branches: [
+      { id:'destruction', name:'Destruction', color:'#C91A09', nodes:[
+        { id:'mc_a1', name:'Focused Mind',   cost:1, grants:{stat:{mag:3}},            desc:'+3 MAG' },
+        { id:'mc_a2', name:'Ley Line',       cost:1, grants:{skill:'ley_line'},        req:'mc_a1', desc:'AoE ground spell' },
+        { id:'mc_a3', name:'Forbidden Spell',cost:2, grants:{skill:'forbidden_spell'}, req:'mc_a2', desc:'Battlefield-rewriting blast' } ]},
+      { id:'enchantment', name:'Enchantment', color:'#81007B', nodes:[
+        { id:'mc_b1', name:'Deep Reserves',  cost:1, grants:{stat:{mp:25}},            desc:'+25 max MP' },
+        { id:'mc_b2', name:'Unravel',        cost:1, grants:{skill:'unravel'},         req:'mc_b1', desc:'Strip enemy buffs' },
+        { id:'mc_b3', name:'Mana Shield',    cost:2, grants:{skill:'mana_shield'},     req:'mc_b2', desc:'MP-fueled barrier' } ]},
+      { id:'timespace', name:'Time/Space', color:'#68BCC5', nodes:[
+        { id:'mc_c1', name:'Quickened',      cost:1, grants:{stat:{agi:3}},            desc:'+3 AGI' },
+        { id:'mc_c2', name:'Spell Weave',    cost:1, grants:{skill:'spell_weave'},     req:'mc_c1', desc:'Double next spell' },
+        { id:'mc_c3', name:'Warded Flesh',   cost:2, grants:{stat:{hp:15,def:2}},      req:'mc_c2', desc:'+15 HP, +2 DEF' } ]} ] },
+    priest: { branches: [
+      { id:'holy', name:'Holy Smite', color:'#DBA000', nodes:[
+        { id:'pr_a1', name:'Zeal',           cost:1, grants:{stat:{mag:3}},            desc:'+3 MAG' },
+        { id:'pr_a2', name:'Divine Smite',   cost:1, grants:{skill:'divine_smite'},    req:'pr_a1', desc:'Holy damage' },
+        { id:'pr_a3', name:'Wrath of Solheim',cost:2,grants:{skill:'wrath_solheim'},   req:'pr_a2', desc:'Massive holy AoE' } ]},
+      { id:'healer', name:'Pure Healer', color:'#77C537', nodes:[
+        { id:'pr_b1', name:'Devotion',       cost:1, grants:{stat:{mp:25}},            desc:'+25 max MP' },
+        { id:'pr_b2', name:'Sacred Ground',  cost:1, grants:{skill:'sacred_ground'},   req:'pr_b1', desc:'Area heal-over-time' },
+        { id:'pr_b3', name:"Martyr's Shield",cost:2, grants:{skill:'martyrs_shield'},  req:'pr_b2', desc:'Take a hit for an ally' } ]},
+      { id:'hex', name:'Curse/Hex', color:'#81007B', nodes:[
+        { id:'pr_c1', name:'Hardened Faith', cost:1, grants:{stat:{hp:18}},            desc:'+18 max HP' },
+        { id:'pr_c2', name:'Cleanse',        cost:1, grants:{skill:'cleanse'},         req:'pr_c1', desc:'Purge status effects' },
+        { id:'pr_c3', name:'Iron Resolve',   cost:2, grants:{stat:{def:4}},            req:'pr_c2', desc:'+4 DEF' } ]} ] },
+    noble: { branches: [
+      { id:'court', name:'Political', color:'#DBA000', nodes:[
+        { id:'nb_a1', name:'Bearing',        cost:1, grants:{stat:{def:3}},            desc:'+3 DEF' },
+        { id:'nb_a2', name:'Rally',          cost:1, grants:{skill:'rally'},           req:'nb_a1', desc:'Party ATK buff' },
+        { id:'nb_a3', name:'House Wrath',     cost:2, grants:{skill:'house_wrath'},     req:'nb_a2', desc:'Party ATK & DEF surge' } ]},
+      { id:'bloodarts', name:'Combat Blood Arts', color:'#C91A09', nodes:[
+        { id:'nb_b1', name:'Discipline',     cost:1, grants:{stat:{atk:3}},            desc:'+3 ATK' },
+        { id:'nb_b2', name:'Ancestral Call', cost:1, grants:{skill:'ancestral_call'},  req:'nb_b1', desc:'Summon ancestor strike' },
+        { id:'nb_b3', name:'Iron Will',      cost:2, grants:{skill:'blood_iron_will'}, req:'nb_b2', desc:'Negate 30% damage' } ]},
+      { id:'spy', name:'Spy Master', color:'#6C6E68', nodes:[
+        { id:'nb_c1', name:'Vigilance',      cost:1, grants:{stat:{agi:3}},            desc:'+3 AGI' },
+        { id:'nb_c2', name:'Calculated Strike',cost:1,grants:{skill:'calculated_strike'},req:'nb_c1', desc:'Expose the enemy' },
+        { id:'nb_c3', name:'Survivor',       cost:2, grants:{stat:{hp:20}},            req:'nb_c2', desc:'+20 max HP' } ]} ] },
+    prince: { branches: [
+      { id:'commander', name:'Battlefield Commander', color:'#C91A09', nodes:[
+        { id:'pn_a1', name:'Warlord',        cost:1, grants:{stat:{atk:3}},            desc:'+3 ATK' },
+        { id:'pn_a2', name:'Sovereign Strike',cost:1,grants:{skill:'sovereign_strike'},req:'pn_a1', desc:'2x strike, may Fear' },
+        { id:'pn_a3', name:'Royal Decree',   cost:2, grants:{skill:'royal_decree'},    req:'pn_a2', desc:'Allies act first' } ]},
+      { id:'sovmagic', name:'Sovereign Magic', color:'#FE8A18', nodes:[
+        { id:'pn_b1', name:'Dragonblood',    cost:1, grants:{stat:{mp:20,mag:2}},      desc:'+20 MP, +2 MAG' },
+        { id:'pn_b2', name:"Dragon's Breath",cost:1, grants:{skill:'dragons_breath'},  req:'pn_b1', desc:'AoE fire' },
+        { id:'pn_b3', name:'Vow of the Realm',cost:2,grants:{skill:'vow_realm'},        req:'pn_b2', desc:'Party survives one-shots' } ]},
+      { id:'diplomat', name:'Diplomat', color:'#68BCC5', nodes:[
+        { id:'pn_c1', name:'Poise',          cost:1, grants:{stat:{def:3}},            desc:'+3 DEF' },
+        { id:'pn_c2', name:'Conditioning',   cost:1, grants:{stat:{hp:22}},            req:'pn_c1', desc:'+22 max HP' },
+        { id:'pn_c3', name:'Statesman',      cost:2, grants:{stat:{def:3,agi:2}},      req:'pn_c2', desc:'+3 DEF, +2 AGI' } ]} ] },
+    commoner: { branches: [
+      { id:'soldier', name:'Soldier', color:'#C91A09', nodes:[
+        { id:'cm_a1', name:'Drilled',        cost:1, grants:{stat:{def:3}},            desc:'+3 DEF' },
+        { id:'cm_a2', name:"Soldier's Drill",cost:1, grants:{skill:'soldiers_drill'},  req:'cm_a1', desc:'Repeat last action free' },
+        { id:'cm_a3', name:'Veteran',        cost:2, grants:{stat:{hp:25,atk:2}},      req:'cm_a2', desc:'+25 HP, +2 ATK' } ]},
+      { id:'rogue', name:'Rogue/Survivalist', color:'#77C537', nodes:[
+        { id:'cm_b1', name:'Light Feet',     cost:1, grants:{stat:{agi:4}},            desc:'+4 AGI' },
+        { id:'cm_b2', name:'Cheap Shot',     cost:1, grants:{skill:'cheap_shot'},      req:'cm_b1', desc:'Ignore enemy DEF' },
+        { id:'cm_b3', name:'Gut Feeling',    cost:2, grants:{skill:'gut_feeling'},     req:'cm_b2', desc:'Perfect block' } ]},
+      { id:'lineage', name:'Secret Lineage', color:'#81007B', nodes:[
+        { id:'cm_c1', name:'Latent Spark',   cost:1, grants:{stat:{mag:3,mp:15}},      desc:'+3 MAG, +15 MP' },
+        { id:'cm_c2', name:'Hidden Talent',  cost:1, grants:{skill:'hidden_talent'},   req:'cm_c1', desc:'Random powerful effect' },
+        { id:'cm_c3', name:'Awakened Blood', cost:2, grants:{stat:{atk:2,def:2,hp:15}},req:'cm_c2', desc:'Lineage stirs: all-round boost' } ]} ] }
+  },
+
+  // ── Monster Codex (Layer 4) ─────────────────────────────────
+  //  Kill N of a type → permanently absorb its essence trait.
+  MONSTER_CODEX: {
+    highland_wolf: { threshold:8, trait:'pack_instinct' },
+    bandit:        { threshold:8, trait:'cutpurse' },
+    moor_soldier:  { threshold:6, trait:'shieldbreaker' },
+    forest_mage:   { threshold:5, trait:'spell_eater' },
+    crypt_shade:   { threshold:5, trait:'void_ward' },
+    void_knight:   { threshold:3, trait:'void_touched' }
+  },
+
+  CODEX_TRAITS: {
+    pack_instinct: { name:'Pack Instinct', desc:'+3 AGI',                       stat:{agi:3} },
+    cutpurse:      { name:'Cutpurse',      desc:'+2 ATK',                       stat:{atk:2} },
+    shieldbreaker: { name:'Shieldbreaker', desc:'+3 ATK',                       stat:{atk:3} },
+    spell_eater:   { name:'Spell Eater',   desc:'+15 max MP',                   stat:{mp:15} },
+    void_ward:     { name:'Void Ward',     desc:'+4 DEF',                       stat:{def:4} },
+    void_touched:  { name:'Void Touched',  desc:'+4 ATK, Shadow Step (dodge)',  stat:{atk:4}, passive:'dodge' },
+    shadow_step:   { name:'Shadow Step',   desc:'15% chance to dodge any hit',  passive:'dodge' },
+    stone_skin:    { name:'Stone Skin',    desc:'+5 DEF',                       stat:{def:5} },
+    survivors_will:{ name:"Survivor's Will",desc:'+10 max HP (awakening)',      stat:{hp:10} },
+    ancestral_wrath:{name:'Ancestral Wrath',desc:'+4 ATK (awakening)',          stat:{atk:4} }
+  }
 
 };

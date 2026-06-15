@@ -140,8 +140,8 @@ var UI = (function() {
   }
 
   // ── Pause/Game Menu ────────────────────────────────────────
-  var MENU_TABS = ['Status','Quests','Inventory','Politics','Bonds','Controls'];
-  var TAB_W = 126;
+  var MENU_TABS = ['Status','Quests','Inventory','Politics','Bonds','Mastery','Controls'];
+  var TAB_W = 106;
 
   function openMenu() {
     menuState = {
@@ -169,8 +169,11 @@ var UI = (function() {
 
     // Mouse tab clicks
     MENU_TABS.forEach(function(tab, i) {
-      if (ENGINE.isButtonClicked(20 + i*(TAB_W+8), 50, TAB_W, 28)) menuState.tab = i;
+      if (ENGINE.isButtonClicked(20 + i*(TAB_W+4), 50, TAB_W, 28)) menuState.tab = i;
     });
+
+    // Mastery tab: spend points on skill-tree nodes
+    if (menuState.tab === 5) handleMasteryInput(20, 90, ENGINE.getCanvas().width - 40);
 
     // Politics tab: convene the War Council on demand (Prince/Noble)
     if (menuState.tab === 3) {
@@ -183,7 +186,7 @@ var UI = (function() {
     }
 
     // Controls tab: rebind clicks
-    if (menuState.tab === 5) {
+    if (menuState.tab === 6) {
       handleControlsClicks(20, 90, ENGINE.getCanvas().width - 40);
     }
   }
@@ -216,7 +219,8 @@ var UI = (function() {
       case 2: SYSTEMS.renderInventoryPanel(ctx, contentX, contentY, contentW, contentH); break;
       case 3: SYSTEMS.renderPoliticalPanel(ctx, contentX, contentY, contentW, contentH); break;
       case 4: SYSTEMS.renderRomancePanel(ctx, contentX, contentY, contentW, contentH); break;
-      case 5: renderControlsTab(ctx, contentX, contentY, contentW, contentH); break;
+      case 5: renderMasteryTab(ctx, contentX, contentY, contentW, contentH); break;
+      case 6: renderControlsTab(ctx, contentX, contentY, contentW, contentH); break;
     }
 
     ENGINE.drawText('[Q / ←]  prev tab    [E / →]  next tab    [M / ESC]  close',
@@ -805,6 +809,100 @@ var UI = (function() {
     ENGINE.drawText('Press SPACE to continue...', canvasW-200, canvasH-36, {size:7, color:'#6C6E68'});
 
     ENGINE.drawScanlines(0.08);
+  }
+
+  // ── Mastery tab: skill trees + monster codex ───────────────
+  // Shared layout so render and input agree on node hitboxes/numbers.
+  function masteryLayout(x, y, w) {
+    var p = PLAYER.get();
+    var tree = p ? DATA.SKILL_TREES[p.origin] : null;
+    var out = [];
+    if (!tree) return out;
+    var colW = (w - 16) / 3, cardH = 60, num = 1;
+    tree.branches.forEach(function(br, ci) {
+      var cx = x + ci * (colW + 8);
+      br.nodes.forEach(function(node, ni) {
+        out.push({
+          node: node, branch: br, num: num++,
+          rect: { x: cx, y: y + 52 + ni * (cardH + 8), w: colW, h: cardH }
+        });
+      });
+    });
+    return out;
+  }
+
+  function handleMasteryInput(x, y, w) {
+    var p = PLAYER.get();
+    if (!p) return;
+    var layout = masteryLayout(x, y, w);
+    layout.forEach(function(item) {
+      var r = item.rect;
+      var clicked = ENGINE.isButtonClicked(r.x, r.y, r.w, r.h);
+      var keyed   = ENGINE.isKeyJust('Digit' + item.num);
+      if ((clicked || keyed) && PLAYER.canUnlockNode(item.node.id)) {
+        var node = PLAYER.unlockMasteryNode(item.node.id);
+        if (node) showNotification('Unlocked: ' + node.name, '#77C537');
+      }
+    });
+  }
+
+  function renderMasteryTab(ctx, x, y, w, h) {
+    var p = PLAYER.get();
+    if (!p) return;
+    var tree = DATA.SKILL_TREES[p.origin];
+
+    ENGINE.drawText('MASTERY POINTS: ' + (p.masteryPoints || 0), x, y + 4, { size: 11, color: '#F2CD37', bold: true });
+    ENGINE.drawText('Click a node or press its number to unlock. Branches need their lower node first.',
+      x + 200, y + 4, { size: 7, color: '#9BA19D' });
+
+    if (!tree) {
+      ENGINE.drawText('No skill tree for this origin.', x, y + 30, { size: 9, color: '#9BA19D' });
+      return;
+    }
+
+    var colW = (w - 16) / 3;
+    // Branch headers
+    tree.branches.forEach(function(br, ci) {
+      var cx = x + ci * (colW + 8);
+      ENGINE.drawLegoBrick(cx, y + 24, colW, 18, br.color, ENGINE.darken(br.color, 30), { plate: true });
+      ENGINE.drawText(br.name, cx + colW / 2, y + 37, { size: 8, color: '#1B2A34', bold: true, align: 'center' });
+    });
+
+    // Node cards
+    masteryLayout(x, y, w).forEach(function(item) {
+      var r = item.rect, node = item.node;
+      var owned = p.masteryNodes.indexOf(node.id) !== -1;
+      var avail = PLAYER.canUnlockNode(node.id);
+      var locked = node.req && p.masteryNodes.indexOf(node.req) === -1;
+      var bg = owned ? 'rgba(20,60,30,0.95)' : avail ? 'rgba(0,40,90,0.95)' : 'rgba(12,14,24,0.9)';
+      var border = owned ? '#77C537' : avail ? '#F2CD37' : '#3A3F48';
+      ENGINE.drawPanel(r.x, r.y, r.w, r.h, { bg: bg, border: border });
+      var tcol = owned ? '#B8F0B8' : locked ? '#6C6E68' : '#FFFFFF';
+      ENGINE.drawText('[' + item.num + '] ' + node.name, r.x + 8, r.y + 16, { size: 8, color: tcol, bold: true });
+      ENGINE.drawText(node.desc, r.x + 8, r.y + 30, { size: 7, color: owned ? '#9BD39B' : '#9BA19D' });
+      var tag = owned ? '✓ OWNED' : (locked ? 'LOCKED' : node.cost + ' MP');
+      var tagCol = owned ? '#77C537' : (avail ? '#F2CD37' : '#E0564B');
+      ENGINE.drawText(tag, r.x + r.w - 56, r.y + 50, { size: 7, color: tagCol, bold: true });
+    });
+
+    // Monster Codex strip
+    var cy = y + 52 + 3 * 68 + 6;
+    ENGINE.drawText('MONSTER CODEX — Essence Absorption', x, cy, { size: 9, color: '#81007B', bold: true });
+    var ex = x, ey = cy + 16;
+    Object.keys(DATA.MONSTER_CODEX).forEach(function(type, i) {
+      var entry = DATA.MONSTER_CODEX[type];
+      var kills = (p.monsterCodex && p.monsterCodex[type]) || 0;
+      var done = p.codexTraits.indexOf(entry.trait) !== -1;
+      var def = DATA.ENEMIES[type];
+      var name = def ? def.name : type;
+      var tr = DATA.CODEX_TRAITS[entry.trait];
+      var col = done ? '#77C537' : '#9BA19D';
+      var label = (done ? '✓ ' : '') + name + ' ' + Math.min(kills, entry.threshold) + '/' + entry.threshold +
+                  (done ? ' → ' + (tr ? tr.name : entry.trait) : '');
+      ENGINE.drawText(label, ex, ey, { size: 7, color: col });
+      ey += 13;
+      if (i === 2) { ey = cy + 16; ex = x + w / 2; }
+    });
   }
 
   // ── Leveled-up banner ──────────────────────────────────────

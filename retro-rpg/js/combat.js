@@ -18,6 +18,7 @@ var COMBAT = (function() {
       var def = DATA.ENEMIES[e.type || e.id] || DATA.ENEMIES['bandit'];
       return {
         id:        e.id || e.type,
+        codexType: def.id,
         name:      def.name,
         hp:        def.hp, maxHp: def.hp,
         mp:        20,     maxMp: 20,
@@ -144,6 +145,7 @@ var COMBAT = (function() {
 
   function collectRewards() {
     var totalXp = 0, totalGold = 0;
+    state.absorbed = [];
     state.enemies.forEach(function(e) {
       totalXp  += e.xp || 0;
       if (e.gold && e.gold.length === 2) {
@@ -155,7 +157,22 @@ var COMBAT = (function() {
           if (Math.random() < 0.4) PLAYER.addItem(drop, 1);
         });
       }
+      // Monster Codex: every slain foe counts toward essence absorption
+      var absorbed = PLAYER.recordKill(e.codexType);
+      if (absorbed) {
+        state.absorbed.push(absorbed);
+        addLog('★ Essence absorbed: ' + absorbed.name + ' — ' + absorbed.desc);
+      }
     });
+    // Bloodline Awakening (Layer 7): survive a battle at death's door and
+    // a permanent power awakens through the crisis — once.
+    var pl = PLAYER.get();
+    if (pl && state.player.hp > 0 && state.player.hp <= state.player.maxHp * 0.15 && !PLAYER.getFlag('awakened_crisis')) {
+      PLAYER.setFlag('awakened_crisis', true);
+      var awk = PLAYER.awaken(pl.bloodPower ? 'ancestral_wrath' : 'survivors_will');
+      if (awk) { state.absorbed.push(awk); addLog('⚡ AWAKENING! ' + awk.name + ' — ' + awk.desc); }
+    }
+
     var leveled = PLAYER.gainXp(totalXp);
     PLAYER.gainGold(totalGold);
     state.rewardXp   = totalXp;
@@ -559,6 +576,12 @@ var COMBAT = (function() {
 
   function applyDamage(target, amount) {
     if (target.invincible) { addLog('No effect — invincible!'); return; }
+    // Shadow Step (codex passive): chance to dodge any incoming hit.
+    if (target.isPlayer && amount > 0 && PLAYER.getDodgeChance() > 0 && Math.random() < PLAYER.getDodgeChance()) {
+      addLog(target.name + ' melts into shadow — attack dodged!');
+      ENGINE.addFloatText(200, 350, 'DODGE', '#68BCC5');
+      return;
+    }
     // Vow of the Realm: can't die in one hit
     if (target.isPlayer && target.vowActive && target.hp - amount <= 0) {
       target.hp = 1;
