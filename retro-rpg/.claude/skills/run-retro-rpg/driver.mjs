@@ -90,8 +90,40 @@ async function newGame(page, { originIdx = 0 } = {}) {
   await page.keyboard.press('Enter'); await sleep(300);          // origin
   await page.keyboard.press('Enter'); await sleep(300);          // name (default)
   await page.keyboard.press('Enter'); await sleep(500);          // confirm
-  await page.keyboard.press('Enter'); await sleep(300);          // prologue (skip type)
-  await page.keyboard.press('Enter'); await sleep(800);          // prologue (advance)
+  await resolveOpening(page);                                    // cinematic + opening fight
+}
+
+// Play through the cinematic screenplay (Space advances beats, commits the
+// default fork choice, dismisses the consequence card), then — if the chosen
+// fork routed into the opening battle — win it by spamming ATTACK. Lands the
+// player in their kingdom's town, ready for the walk-out smoke checks.
+async function resolveOpening(page) {
+  for (let i = 0; i < 90; i++) {
+    const active = await page.evaluate(() =>
+      typeof SCREENPLAY !== 'undefined' && SCREENPLAY.isActive());
+    if (!active) break;
+    await page.keyboard.press('Space');
+    await sleep(160);
+  }
+  // Did a fork route us into combat? If so, attack until it resolves.
+  const inCombat = await page.evaluate(() => {
+    try { const cs = COMBAT.getState(); return !!cs && cs.phase !== 'end' && !cs.victory && !cs.defeat; }
+    catch { return false; }
+  });
+  if (inCombat) {
+    for (let i = 0; i < 80; i++) {
+      const done = await page.evaluate(() => {
+        try { const cs = COMBAT.getState(); return !cs || cs.victory || cs.defeat || cs.phase === 'end'; }
+        catch { return true; }
+      });
+      if (done) break;
+      await page.keyboard.press('a');     // ATTACK (KeyA), only acts on player turn
+      await sleep(320);
+    }
+    await page.keyboard.press('Enter'); await sleep(400);  // dismiss results
+    await page.keyboard.press('Enter'); await sleep(500);  // back to world
+  }
+  await sleep(300);
 }
 
 // Steered walk: re-reads position each step, dodges on the other axis when

@@ -348,6 +348,13 @@ var COMBAT = (function() {
     var action = chooseEnemyAction(enemy);
     executeEnemyAction(enemy, action);
     enemy.moveIdx = (enemy.moveIdx + 1) % (enemy.moves||['attack']).length;
+
+    // Advance the turn after acting. Without this the enemy_turn phase
+    // never yields — main.updateCombat() re-invokes enemyTurn() every frame,
+    // so a single foe would attack ~60×/second and instantly kill the player.
+    // (playerAttack() ends the same way; this mirrors it for the AI.)
+    state.animTimer = 30;
+    nextTurn();
   }
 
   function chooseEnemyAction(enemy) {

@@ -17,6 +17,7 @@ var GAME = (function() {
     HOW_TO:    'how_to',
     CHARGEN:   'chargen',
     PROLOGUE:  'prologue',
+    SCREENPLAY:'screenplay',
     WORLD:     'world',
     COMBAT:    'combat',
     DIALOG:    'dialog',
@@ -87,14 +88,23 @@ var GAME = (function() {
           PLAYER.recalcStats();
           // Start main quest for all
           PLAYER.startQuest('main_quest_1');
-          // Show prologue
-          buildPrologue(origin);
-          transition(STATE.PROLOGUE);
+          // Cinematic branching screenplay (falls back to the flat
+          // prologue if the module ever fails to load).
+          if (typeof SCREENPLAY !== 'undefined') {
+            SCREENPLAY.start(origin, onScreenplayDone);
+            transition(STATE.SCREENPLAY);
+          } else {
+            buildPrologue(origin);
+            transition(STATE.PROLOGUE);
+          }
         });
         break;
 
       case STATE.PROLOGUE:
         prologueDone = false;
+        break;
+
+      case STATE.SCREENPLAY:
         break;
 
       case STATE.WORLD:
@@ -165,6 +175,11 @@ var GAME = (function() {
       case STATE.HOW_TO:     updateHowTo();    break;
       case STATE.CHARGEN:    CHARGEN.handleInput(); break;
       case STATE.PROLOGUE:   updatePrologue(); break;
+      case STATE.SCREENPLAY:
+        SCREENPLAY.update(dt);
+        SCREENPLAY.updateResolve(dt);
+        SCREENPLAY.handleInput();
+        break;
       case STATE.WORLD:      updateWorld(dt);  break;
       case STATE.COMBAT:     updateCombat();   break;
       case STATE.DIALOG:     DIALOG.update(dt); DIALOG.handleInput(); break;
@@ -227,6 +242,18 @@ var GAME = (function() {
     if (ENGINE.action('cancel') || ENGINE.action('confirm') ||
         ENGINE.isButtonClicked(W/2-80, H-90, 160, 28)) {
       transition(STATE.TITLE);
+    }
+  }
+
+  // ── Screenplay resolution ──────────────────────────────────
+  // The cinematic fork calls this once the player commits a choice
+  // and dismisses the consequence card. Routes into the opening
+  // battle (combat-path choices) or straight onto the overworld.
+  function onScreenplayDone(out) {
+    if (out && out.route === 'combat') {
+      transition(STATE.COMBAT, out.combat);
+    } else {
+      transition(STATE.WORLD, { zone: out.zone, x: out.x, y: out.y });
     }
   }
 
@@ -386,6 +413,10 @@ var GAME = (function() {
       case STATE.PROLOGUE:
         var po = PLAYER.get();
         UI.renderPrologue(ctx, W, H, po ? po.origin : 'commoner', frame, prologueText, null);
+        break;
+
+      case STATE.SCREENPLAY:
+        SCREENPLAY.render(ctx, W, H, frame);
         break;
 
       case STATE.WORLD:
