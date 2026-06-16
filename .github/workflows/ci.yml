@@ -50,6 +50,14 @@ jobs:
           cache: npm
           cache-dependency-path: podcastforge/backend/package-lock.json
       - run: npm ci
+      # Cache the downloaded Chromium across runs (keyed on the installed
+      # Playwright version); the install step then just verifies/installs OS deps.
+      - id: pw-version
+        run: echo "v=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.v }}
       - run: npx playwright install --with-deps chromium
       - run: npm run screenshots
       - uses: actions/upload-artifact@v4
