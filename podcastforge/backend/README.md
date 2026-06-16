@@ -98,6 +98,24 @@ browser.
 `GET /api/health` → `{ ok: true, providers: [...] }`. Point your host's health
 check here.
 
+## Visual capture (screenshots)
+
+A Playwright script boots the server, drives a headless Chromium through the
+key screens (landing, the Guide and FAQ, the workspace, and the account panel's
+"which keys can transcribe" hint, plus a mobile FAQ shot) and writes PNGs to
+`../screenshots/`:
+
+```bash
+npm install                       # installs playwright (devDependency)
+npx playwright install chromium   # one-time browser download
+npm run screenshots               # -> podcastforge/screenshots/*.png
+```
+
+Each shot is independent, so one failure won't abort the rest. Point it at an
+already-running instance with `PW_BASE_URL=https://your-host` (it then skips
+spawning a local server). Note: the browser download needs egress to
+`cdn.playwright.dev`, which is blocked in some sandboxes.
+
 ## Security posture
 
 Built-in, zero-dependency hardening:
