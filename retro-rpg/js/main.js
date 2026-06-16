@@ -20,6 +20,7 @@ var GAME = (function() {
     SCREENPLAY:'screenplay',
     WORLD:     'world',
     COMBAT:    'combat',
+    HEX:       'hex',
     DIALOG:    'dialog',
     MENU:      'menu',
     SHOP:      'shop',
@@ -134,9 +135,24 @@ var GAME = (function() {
         }
         break;
 
+      case STATE.HEX:
+        if (data && data.kind === 'behemoth') {
+          HEX.startCrystalBehemoth(function(result) { onHexEnd(result); });
+        }
+        break;
+
       case STATE.GAME_OVER:
         break;
     }
+  }
+
+  // Tactical battle resolution → back to the world (or game over).
+  function onHexEnd(result) {
+    var p = PLAYER.get();
+    if (result === 'lose') { transition(STATE.GAME_OVER); return; }
+    if (SYSTEMS.MILITARY.checkPromotion && p && p.origin === 'commoner') SYSTEMS.MILITARY.checkPromotion();
+    transition(STATE.WORLD);
+    UI.showNotification('Tactical victory!', '#77C537');
   }
 
   // ── Prologue text builder ──────────────────────────────────
@@ -182,6 +198,7 @@ var GAME = (function() {
         break;
       case STATE.WORLD:      updateWorld(dt);  break;
       case STATE.COMBAT:     updateCombat();   break;
+      case STATE.HEX:        HEX.update(dt); HEX.handleInput(); break;
       case STATE.DIALOG:     DIALOG.update(dt); DIALOG.handleInput(); break;
       case STATE.MENU:       UI.handleMenuInput(); break;
       case STATE.SHOP:       UI.handleShopInput(); break;
@@ -292,6 +309,12 @@ var GAME = (function() {
     // Save shortcut
     if (ENGINE.action('save')) {
       if (PLAYER.save()) UI.showNotification('Game saved!', '#77C537');
+    }
+
+    // Tactical battle launcher (T) — hex party combat vs the Crystal Behemoth.
+    if (ENGINE.isKeyJust('KeyT') && !UI.isMenuOpen() && !UI.isShopOpen()) {
+      transition(STATE.HEX, { kind: 'behemoth' });
+      return;
     }
 
     // Toggle menu
@@ -453,6 +476,10 @@ var GAME = (function() {
 
       case STATE.COMBAT:
         COMBAT.render(ctx, W, H);
+        break;
+
+      case STATE.HEX:
+        HEX.render(ctx, W, H);
         break;
 
       case STATE.GAME_OVER:
