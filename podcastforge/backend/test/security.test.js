@@ -69,14 +69,18 @@ test('API key encryption roundtrips and rejects tampering', () => {
 });
 
 // ---- live server checks ----
-function request(port, method, path, headers) {
+function request(port, method, path, headers, body) {
   return new Promise((resolve, reject) => {
-    const req = http.request({ host: '127.0.0.1', port, method, path, headers }, (res) => {
-      let body = '';
-      res.on('data', (d) => (body += d));
-      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body }));
+    const payload = body == null ? null : (typeof body === 'string' ? body : JSON.stringify(body));
+    const hdrs = Object.assign({}, headers);
+    if (payload != null) hdrs['content-length'] = Buffer.byteLength(payload);
+    const req = http.request({ host: '127.0.0.1', port, method, path, headers: hdrs }, (res) => {
+      let buf = '';
+      res.on('data', (d) => (buf += d));
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: buf }));
     });
     req.on('error', reject);
+    if (payload != null) req.write(payload);
     req.end();
   });
 }
@@ -97,10 +101,26 @@ test('server sets security headers and throttles auth brute-force', async (t) =>
   assert.equal(health.headers['x-frame-options'], 'DENY');
 
   // 10 logins/15min are allowed; the 11th from the same IP must be 429.
+  // Use a well-formed body with bad credentials so we exercise the real login
+  // path (a 401), not the empty-body branch — and so the bucket isn't reset by
+  // a success.
+  const creds = { email: 'nobody@example.com', password: 'wrong-password-123' };
   let last;
   for (let i = 0; i < 12; i++) {
-    last = await request(port, 'POST', '/api/auth/login', { 'content-type': 'application/json' });
+    last = await request(port, 'POST', '/api/auth/login', { 'content-type': 'application/json' }, creds);
   }
   assert.equal(last.status, 429);
   assert.ok(last.headers['retry-after']);
+
+  // A successful login must clear the bucket so a shared IP isn't locked out.
+  ratelimit._reset();
+  await request(port, 'POST', '/api/auth/signup', { 'content-type': 'application/json' }, { email: 'real@example.com', password: 'strong-password-123' });
+  for (let i = 0; i < 9; i++) {
+    await request(port, 'POST', '/api/auth/login', { 'content-type': 'application/json' }, { email: 'real@example.com', password: 'nope' });
+  }
+  // 9 failures so far; a success now should reset, so the next 10 are allowed.
+  const good = await request(port, 'POST', '/api/auth/login', { 'content-type': 'application/json' }, { email: 'real@example.com', password: 'strong-password-123' });
+  assert.equal(good.status, 200);
+  const afterReset = await request(port, 'POST', '/api/auth/login', { 'content-type': 'application/json' }, { email: 'real@example.com', password: 'nope' });
+  assert.notEqual(afterReset.status, 429); // bucket was cleared by the success
 });

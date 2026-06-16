@@ -79,19 +79,27 @@ async function fetchProfile(provider, accessToken) {
   const u = await r.json().catch(() => ({}));
   if (!r.ok || !u.id) throw new Error('Could not read GitHub profile.');
 
-  // Always resolve the email from the verified-emails endpoint rather than
-  // trusting the profile's `email` field. Accounts are linked by email, so a
-  // non-verified address must never be accepted — that would let someone claim
-  // an account whose email they don't actually control.
-  const er = await fetch('https://api.github.com/user/emails', {
-    headers: { Authorization: `Bearer ${accessToken}`, 'User-Agent': 'PodcastForge', Accept: 'application/vnd.github+json' },
-    signal: AbortSignal.timeout(15000)
-  });
-  const list = await er.json().catch(() => []);
-  const primary = Array.isArray(list)
-    ? (list.find(e => e.primary && e.verified) || list.find(e => e.verified))
-    : null;
-  const email = primary && primary.email;
+  // Prefer the verified-emails endpoint so we only ever accept a verified
+  // address (accounts are linked by email — accepting an unverified one would
+  // let someone claim an account whose email they don't control). If that call
+  // is unavailable (transient 5xx/timeout/rate-limit), fall back to the
+  // profile's public `email`, which GitHub only exposes when it is itself a
+  // verified address — so the verification guarantee still holds.
+  let email = null;
+  try {
+    const er = await fetch('https://api.github.com/user/emails', {
+      headers: { Authorization: `Bearer ${accessToken}`, 'User-Agent': 'PodcastForge', Accept: 'application/vnd.github+json' },
+      signal: AbortSignal.timeout(15000)
+    });
+    if (er.ok) {
+      const list = await er.json().catch(() => []);
+      const primary = Array.isArray(list)
+        ? (list.find(e => e.primary && e.verified) || list.find(e => e.verified))
+        : null;
+      email = primary && primary.email;
+    }
+  } catch (e) { /* fall back to the (verified) public profile email below */ }
+  if (!email) email = u.email || null;
   if (!email) throw new Error('No verified email on your GitHub account.');
   return { email, providerId: String(u.id), name: u.name || u.login || '' };
 }

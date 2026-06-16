@@ -23,6 +23,8 @@
     <div class="nav-links" id="navbar-links">
       <a href="#landing-hero" class="nav-landing-only">Home</a>
       <a href="#landing-features" class="nav-landing-only">Features</a>
+      <a href="#guide" class="nav-landing-only">Guide</a>
+      <a href="#faq" class="nav-landing-only">FAQ</a>
       <a href="#/generator" class="nav-workspace-only nav-route" style="display: none;">Generator</a>
       <a href="#/agent" class="nav-workspace-only nav-route" style="display: none;">Agent</a>
       <a href="#/discover" class="nav-workspace-only nav-route" style="display: none;">Discover</a>
@@ -503,10 +505,120 @@
       </div>
     </section>
 
+    <!-- User Manual / Guide -->
+    <section id="guide" class="guide-section">
+      <div class="guide-wrap">
+        <div class="guide-head reveal">
+          <h2 class="section-title">How to use PodcastForge efficiently</h2>
+          <p class="section-sub">From a podcast link to a week of content in five steps. Each tool hands its output to the next.</p>
+        </div>
+
+        <div class="guide-steps">
+          <div class="guide-step reveal">
+            <div class="guide-num">1</div>
+            <div class="guide-body">
+              <h3>Add an API key (bring your own)</h3>
+              <p>Open the workspace and paste any supported key in the key bar — Anthropic, OpenAI, Google Gemini, Groq, OpenRouter, or NVIDIA. PodcastForge auto-detects the provider. <b>Tip:</b> a free <b>Groq</b> or <b>Gemini</b> key also unlocks audio transcription, so you never need a paid OpenAI key just to transcribe.</p>
+            </div>
+          </div>
+          <div class="guide-step reveal">
+            <div class="guide-num">2</div>
+            <div class="guide-body">
+              <h3>Find a podcast &amp; pull its transcript</h3>
+              <p>Use <b>Discover</b> to search Apple Podcasts, or paste an Apple/Spotify/YouTube link, an RSS URL, or a show name into <b>Transcripts</b>. Episodes that publish a transcript are pulled instantly; for the rest, click <b>Generate from audio</b> to transcribe with your OpenAI, Groq, or Gemini key.</p>
+            </div>
+          </div>
+          <div class="guide-step reveal">
+            <div class="guide-num">3</div>
+            <div class="guide-body">
+              <h3>Generate repurposed content</h3>
+              <p>Send a transcript to the <b>Generator</b> and pick formats — blog post, X/Twitter thread, LinkedIn post, show notes, newsletter, and more. Run the <b>Agent</b> to auto-repurpose into several formats at once.</p>
+            </div>
+          </div>
+          <div class="guide-step reveal">
+            <div class="guide-num">4</div>
+            <div class="guide-body">
+              <h3>Go deeper with the specialist tools</h3>
+              <p><b>Content Miner</b> extracts quotes, hooks, and insights section by section. <b>Script Studio</b> drafts full episode scripts. <b>Music Brief</b> suggests intro/outro direction. <b>AI Stack Tracker</b> audits the tools mentioned in an episode.</p>
+            </div>
+          </div>
+          <div class="guide-step reveal">
+            <div class="guide-num">5</div>
+            <div class="guide-body">
+              <h3>Track usage &amp; manage keys</h3>
+              <p>Click your account chip (top-right) for today's usage against your plan, recent activity, and connected keys — including which of them can transcribe audio. The free plan has per-tool daily caps; the trial and paid plans are unlimited.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="guide-tips reveal">
+          <h3>Pro tips for speed</h3>
+          <ul>
+            <li><span class="tip-ic">⌨️</span> Press <b>Enter</b> in the Discover and Transcripts inputs to search/load without reaching for the mouse.</li>
+            <li><span class="tip-ic">🔁</span> Tools are chained — the <b>→ Generator</b>, <b>→ Agent</b>, and <b>→ Miner</b> buttons on a pulled transcript skip copy-paste entirely.</li>
+            <li><span class="tip-ic">🎙️</span> No published transcript? Pick a shorter episode (audio is capped at 25&nbsp;MB) and use <b>Generate from audio</b>.</li>
+            <li><span class="tip-ic">💸</span> Mix providers: a fast free model (Groq/Gemini) for drafts, a stronger model (Claude/GPT-4o) for final polish.</li>
+            <li><span class="tip-ic">📊</span> Watch the daily caps in your account panel so you don't get interrupted mid-workflow on the free plan.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq" class="faq-section">
+      <div class="faq-wrap">
+        <div class="faq-head reveal">
+          <h2 class="section-title">Frequently asked questions</h2>
+          <p class="section-sub">What PodcastForge is, how your keys are handled, and what each plan includes.</p>
+        </div>
+
+        <div class="faq-list">
+          <details class="faq-item reveal">
+            <summary>What is PodcastForge?</summary>
+            <div class="faq-a">PodcastForge turns any podcast episode into ready-to-publish content. Pull (or generate) a transcript, then repurpose it into blog posts, social threads, newsletters, show notes, episode scripts, and more — using your own AI provider key.</div>
+          </details>
+          <details class="faq-item reveal">
+            <summary>Do I need to pay for an AI subscription?</summary>
+            <div class="faq-a">You bring your own API key, so you pay your provider directly for what you use. Several providers have generous free tiers — a free <b>Groq</b> or <b>Google Gemini</b> key is enough to both generate content and transcribe audio. PodcastForge's own Free plan adds daily caps; the trial and paid plans lift them.</div>
+          </details>
+          <details class="faq-item reveal">
+            <summary>Which providers are supported?</summary>
+            <div class="faq-a">Anthropic (Claude), OpenAI, Google Gemini, Groq, OpenRouter, and NVIDIA NIM for content generation. For turning audio into transcripts, use an <b>OpenAI</b>, <b>Groq</b>, or <b>Gemini</b> key (Whisper / multimodal). The app auto-detects the provider from the key format.</div>
+          </details>
+          <details class="faq-item reveal">
+            <summary>How are my API keys stored and used?</summary>
+            <div class="faq-a">If you're signed in, keys are stored <b>encrypted</b> (AES-256-GCM) on the server and used server-side to call providers — they're never returned to the browser. Without an account, your key stays in your browser and calls the provider directly. Either way you can remove a key anytime from your account panel.</div>
+          </details>
+          <details class="faq-item reveal">
+            <summary>Can I transcribe an episode that has no transcript?</summary>
+            <div class="faq-a">Yes. In the Transcripts tool, episodes without a published transcript show a <b>Generate from audio</b> button that transcribes the audio with your OpenAI, Groq, or Gemini key. Audio is capped at 25&nbsp;MB per episode, so shorter episodes transcribe fastest. Your account panel shows which of your keys can transcribe.</div>
+          </details>
+          <details class="faq-item reveal">
+            <summary>How does the free trial and pricing work?</summary>
+            <div class="faq-a">New accounts get a 15-day full trial with unlimited access. After that you can stay on the <b>Free</b> plan (per-tool daily caps), or choose <b>Fixed Pro</b> (unlimited, flat monthly) or <b>Pay-as-you-go</b>. You can switch plans anytime from the pricing section or paywall.</div>
+          </details>
+          <details class="faq-item reveal">
+            <summary>Is explicit or adult content allowed?</summary>
+            <div class="faq-a">No. Podcasts flagged explicit/adult (via the iTunes/RSS flags) are filtered out of search and can't be pulled, and transcripts are screened so explicit material is blocked.</div>
+          </details>
+          <details class="faq-item reveal">
+            <summary>Can I sign in with Google or GitHub?</summary>
+            <div class="faq-a">Yes, when the operator has configured social login. Otherwise, email + password works out of the box. Either way your verified email identifies your account.</div>
+          </details>
+        </div>
+      </div>
+    </section>
+
     <!-- Footer -->
     <footer>
       <div class="footer-brand">🎙️ PodcastForge</div>
-      <div class="footer-copy">Bring-your-own-key content repurposing · Your keys never leave your browser</div>
+      <div class="footer-copy">Bring-your-own-key content repurposing · Manage and remove your keys anytime</div>
+      <div class="footer-links">
+        <a href="#landing-features">Features</a>
+        <a href="#guide">Guide</a>
+        <a href="#faq">FAQ</a>
+        <a href="#pricing">Pricing</a>
+      </div>
     </footer>
 
   <!-- Paywall Modal -->

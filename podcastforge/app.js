@@ -436,8 +436,14 @@ const PROVIDER_MODELS = {
 
 const PROVIDER_LABELS = {
   anthropic: 'Anthropic', gemini: 'Google Gemini', openrouter: 'OpenRouter',
-  nvidia: 'NVIDIA NIM', openai: 'OpenAI'
+  nvidia: 'NVIDIA NIM', openai: 'OpenAI', groq: 'Groq'
 };
+
+// Providers whose keys can ALSO turn episode audio into a transcript (Whisper
+// for OpenAI/Groq, multimodal for Gemini) — mirrors the backend STT_ORDER.
+// Groq is free and Gemini is one most users already have, so transcription
+// doesn't require a paid OpenAI key.
+const STT_PROVIDERS = ['openai', 'groq', 'gemini'];
 
 function buildRequest(provider, model, key, systemPrompt, userPrompt) {
   if (provider === 'anthropic') {
@@ -1181,7 +1187,16 @@ function renderAccount(d) {
 
   h += `<div class="ac-sec"><div class="ac-h">Connected API keys</div>`;
   if ((u.providers || []).length) {
-    u.providers.forEach(p => { h += `<div class="ac-row"><span>🔑 ${e(p)}</span><button class="ac-rm" onclick="app.removeProviderKey('${e(p)}')">Remove</button></div>`; });
+    u.providers.forEach(p => {
+      const stt = STT_PROVIDERS.includes(p);
+      h += `<div class="ac-row"><span>🔑 ${e(PROVIDER_LABELS[p] || p)}${stt ? ' <span class="ac-tag" title="This key can transcribe podcast audio">🎙 transcribes</span>' : ''}</span><button class="ac-rm" onclick="app.removeProviderKey('${e(p)}')">Remove</button></div>`;
+    });
+    const sttKeys = (u.providers || []).filter(p => STT_PROVIDERS.includes(p));
+    if (sttKeys.length) {
+      h += `<div class="ac-hint ac-hint-ok">🎙 Audio transcription is available via ${sttKeys.map(p => e(PROVIDER_LABELS[p] || p)).join(', ')}. Episodes without a published transcript can be generated from audio in the Transcripts tool.</div>`;
+    } else {
+      h += `<div class="ac-hint">🎙 None of your keys can transcribe audio yet. Add a <b>Groq</b> (free) or <b>Google Gemini</b> key to generate transcripts from episodes that don't publish one — no paid OpenAI key required.</div>`;
+    }
   } else h += `<div class="ac-muted">No keys stored. Add one in the workspace key bar.</div>`;
   h += `</div>`;
 
